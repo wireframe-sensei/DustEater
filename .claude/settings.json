@@ -56,7 +56,8 @@
       "Bash(git commit -m 'Optimize scan performance: async sorting, increased I/O concurrency, string optimization *)",
       "Bash(git commit *)",
       "Bash(git commit -m 'Re-enable progress callbacks during scan *)",
-      "Bash(git commit -m 'Fix sort order: show largest items first in file tree *)"
+      "Bash(git commit -m 'Fix sort order: show largest items first in file tree *)",
+      "Bash(git commit -m 'Redesign UI: full-width treemap with hover tooltips, remove sidebar file tree *)"
     ]
   }
 }

@@ -259,100 +259,68 @@ struct MainContentView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Sidebar: Hierarchy tree
-            VStack(spacing: 0) {
-                // Header
-                VStack(spacing: DustEaterTheme.Spacing.sm) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Files & Folders")
-                                .font(DustEaterTheme.Typography.caption)
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .tracking(0.5)
-
-                            Text(root.name)
+        VStack(spacing: 0) {
+            // Header
+            VStack(spacing: DustEaterTheme.Spacing.sm) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let zoomNode = coordinator.zoomNode {
+                            Text(zoomNode.name)
                                 .font(DustEaterTheme.Typography.headline)
                                 .lineLimit(1)
+                            Text(zoomNode.path)
+                                .font(DustEaterTheme.Typography.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            HStack(spacing: DustEaterTheme.Spacing.sm) {
+                                Text("Disk Usage")
+                                    .font(DustEaterTheme.Typography.headline)
+                                Text("• Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
+                                    .font(DustEaterTheme.Typography.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        Spacer()
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: DustEaterTheme.Spacing.md) {
+                        if coordinator.zoomNode != nil {
+                            Button {
+                                coordinator.zoomNode = nil
+                                selectedPath = root.path
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.left")
+                                    Text("Back")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .keyboardShortcut(.escape)
+                        }
                     }
                 }
-                .padding(DustEaterTheme.Spacing.md)
-                .background(.ultraThinMaterial)
-
-                Divider()
-
-                // List
-                FileTreeListView(root: displayRoot, selectedPath: $selectedPath)
             }
-            .frame(minWidth: 300, maxWidth: 400)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .padding(DustEaterTheme.Spacing.md)
+            .background(.ultraThinMaterial)
 
             Divider()
 
-            // Main content: Treemap
-            VStack(spacing: 0) {
-                // Header
-                VStack(spacing: DustEaterTheme.Spacing.sm) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Visualization")
-                                .font(DustEaterTheme.Typography.caption)
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .tracking(0.5)
-
-                            if let zoomNode = coordinator.zoomNode {
-                                Text(zoomNode.name)
-                                    .font(DustEaterTheme.Typography.headline)
-                                    .lineLimit(1)
-                            } else {
-                                HStack(spacing: DustEaterTheme.Spacing.sm) {
-                                    Text("Overview")
-                                        .font(DustEaterTheme.Typography.headline)
-                                    Text("• Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
-                                        .font(DustEaterTheme.Typography.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-
-                        Spacer()
-
-                        HStack(spacing: DustEaterTheme.Spacing.sm) {
-                            if coordinator.zoomNode != nil {
-                                Button {
-                                    coordinator.zoomNode = nil
-                                    selectedPath = root.path
-                                } label: {
-                                    Image(systemName: "chevron.left")
-                                }
-                                .keyboardShortcut(.escape)
-                                .help("Back to overview")
-                            }
-                        }
-                    }
-                }
-                .padding(DustEaterTheme.Spacing.md)
-                .background(.ultraThinMaterial)
-
-                Divider()
-
-                // Treemap - responsive to container size
-                GeometryReader { geometry in
-                    TreemapView(
-                        rects: treemapRects(geometry.size),
-                        rootPath: root.path,
-                        onSelectNode: { node in
+            // Full-width treemap
+            GeometryReader { geometry in
+                TreemapView(
+                    rects: treemapRects(geometry.size),
+                    rootPath: (coordinator.zoomNode ?? root).path,
+                    onSelectNode: { node in
+                        if node.isDirectory {
                             coordinator.zoomNode = node
                             selectedPath = node.path
                         }
-                    )
-                }
+                    }
+                )
             }
-            .frame(minWidth: 300)
         }
     }
 }

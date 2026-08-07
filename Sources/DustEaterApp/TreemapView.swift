@@ -8,23 +8,50 @@ struct TreemapView: View {
     @State private var hoveredId: String?
 
     var body: some View {
-        Canvas { context, size in
-            for rect in rects {
-                drawRect(rect, isHovered: rect.id == hoveredId, in: &context)
+        ZStack {
+            Canvas { context, size in
+                for rect in rects {
+                    drawRect(rect, isHovered: rect.id == hoveredId, in: &context)
+                }
             }
-        }
-        .background(Color(nsColor: .controlBackgroundColor))
-        .contentShape(Rectangle())
-        .onTapGesture { location in
-            if let tapped = rects.first(where: { $0.contains(point: location) }) {
-                onSelectNode(tapped.node)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .contentShape(Rectangle())
+            .onTapGesture { location in
+                if let tapped = rects.first(where: { $0.contains(point: location) }) {
+                    onSelectNode(tapped.node)
+                }
             }
-        }
-        .onContinuousHover { phase in
-            if case .active(let location) = phase {
-                hoveredId = rects.first { $0.contains(point: location) }?.id
-            } else {
-                hoveredId = nil
+            .onContinuousHover { phase in
+                if case .active(let location) = phase {
+                    hoveredId = rects.first { $0.contains(point: location) }?.id
+                } else {
+                    hoveredId = nil
+                }
+            }
+
+            // Tooltip for hovered item
+            if let hoveredId, let hovered = rects.first(where: { $0.id == hoveredId }) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(hovered.node.name)
+                        .font(.system(.headline, design: .default))
+                        .lineLimit(1)
+                    HStack(spacing: 8) {
+                        Text(ByteFormatter.string(fromBytes: hovered.node.size))
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        if hovered.node.isDirectory {
+                            Text("•")
+                                .foregroundStyle(.secondary)
+                            Text("\(hovered.node.itemCount) items")
+                                .font(.system(.caption, design: .default))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(.ultraThinMaterial)
+                .cornerRadius(8)
+                .padding()
             }
         }
     }
