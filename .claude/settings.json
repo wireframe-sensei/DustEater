@@ -53,7 +53,8 @@
       "Bash(pkill dustbench *)",
       "Bash(timeout 180 .build/debug/dustbench ~)",
       "Bash(git add *)",
-      "Bash(git commit -m 'Optimize scan performance: async sorting, increased I/O concurrency, string optimization *)"
+      "Bash(git commit -m 'Optimize scan performance: async sorting, increased I/O concurrency, string optimization *)",
+      "Bash(git commit *)"
     ]
   }
 }
