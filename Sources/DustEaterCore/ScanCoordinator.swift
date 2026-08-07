@@ -56,8 +56,11 @@ public final class ScanCoordinator {
 
             let scanStartTime = DispatchTime.now()
             let scanner = DiskScanner()
-            // Disable progress callbacks to check if they're the bottleneck
-            let node = await scanner.scan(rootPath: path, onProgress: nil)
+            let node = await scanner.scan(rootPath: path) { [weak self] progress in
+                DispatchQueue.main.async {
+                    self?.applyProgress(progress)
+                }
+            }
             let scanElapsed = Double(DispatchTime.now().uptimeNanoseconds - scanStartTime.uptimeNanoseconds) / 1_000_000_000
             print("📊 Filesystem scan: \(String(format: "%.3f", scanElapsed))s")
 
