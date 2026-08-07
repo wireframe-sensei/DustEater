@@ -64,6 +64,7 @@ struct ContentView: View {
             case .finished(let root):
                 MainContentView(
                     root: root,
+                    sortedRoot: sortedRoot,
                     selectedPath: $selectedPath,
                     coordinator: coordinator,
                     treemapRects: treemapRects(for:),
@@ -247,10 +248,15 @@ struct ErrorStateView: View {
 // MARK: - Main Content
 struct MainContentView: View {
     let root: FileNode
+    let sortedRoot: FileNode?
     @Binding var selectedPath: String?
     let coordinator: ScanCoordinator
     let treemapRects: (CGSize) -> [TreemapRect]
     @Binding var showSidebar: Bool
+
+    private var displayRoot: FileNode {
+        sortedRoot ?? root
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -279,7 +285,7 @@ struct MainContentView: View {
                 Divider()
 
                 // List
-                FileTreeListView(root: root, selectedPath: $selectedPath)
+                FileTreeListView(root: displayRoot, selectedPath: $selectedPath)
             }
             .frame(minWidth: 300, maxWidth: 400)
             .background(Color(nsColor: .controlBackgroundColor))
