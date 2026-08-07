@@ -1,0 +1,64 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:DustEater}",
+            "name": "Debug dustbench",
+            "target": "dustbench",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug dustbench"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:DustEater}",
+            "name": "Release dustbench",
+            "target": "dustbench",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release dustbench"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:DustEater}",
+            "name": "Debug appsizes",
+            "target": "appsizes",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug appsizes"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:DustEater}",
+            "name": "Release appsizes",
+            "target": "appsizes",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release appsizes"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:DustEater}",
+            "name": "Debug DustEaterApp",
+            "target": "DustEaterApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug DustEaterApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:DustEater}",
+            "name": "Release DustEaterApp",
+            "target": "DustEaterApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release DustEaterApp"
+        }
+    ]
+}
