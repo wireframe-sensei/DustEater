@@ -58,7 +58,16 @@
       "Bash(git commit -m 'Re-enable progress callbacks during scan *)",
       "Bash(git commit -m 'Fix sort order: show largest items first in file tree *)",
       "Bash(git commit -m 'Redesign UI: full-width treemap with hover tooltips, remove sidebar file tree *)",
-      "Bash(git commit -m 'Restore sidebar + add hierarchical treemap visualization *)"
+      "Bash(git commit -m 'Restore sidebar + add hierarchical treemap visualization *)",
+      "Read(//private/tmp/wiztree-metafile/**)",
+      "Bash(find /tmp/wiztree-metafile/src -type f -name \"*.rs\" | head -20)",
+      "Read(//private/tmp/wiztree-metafile/src/**)",
+      "Read(//tmp/wiztree-metafile/**)",
+      "Bash(ls -la /tmp/wiztree-metafile/assets/)",
+      "Read(//private/tmp/wiztree-metafile/assets/**)",
+      "Read(//tmp/wiztree-metafile/src/output/**)",
+      "Read(//private/tmp/wiztree-metafile/src/output/**)",
+      "Bash(git commit -m 'Add text labels to treemap rectangles for better readability *)"
     ]
   }
 }

@@ -8,7 +8,8 @@ struct TreemapView: View {
     @State private var hoveredId: String?
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
+            // Canvas for rectangles
             Canvas { context, size in
                 for rect in rects {
                     drawRect(rect, isHovered: rect.id == hoveredId, in: &context)
@@ -26,6 +27,30 @@ struct TreemapView: View {
                     hoveredId = rects.first { $0.contains(point: location) }?.id
                 } else {
                     hoveredId = nil
+                }
+            }
+
+            // Text labels overlay for larger rectangles
+            ForEach(rects, id: \.id) { rect in
+                let minDim = min(rect.frame.width, rect.frame.height)
+                if minDim > 60 {  // Only show text for large enough rectangles
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rect.node.name)
+                            .font(.system(size: minDim > 120 ? 12 : 10, weight: .semibold, design: .default))
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+
+                        if minDim > 100 {
+                            Text(ByteFormatter.string(fromBytes: rect.node.size))
+                                .font(.system(size: 9, weight: .regular, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .frame(maxWidth: rect.frame.width - 8, alignment: .topLeading)
+                    .position(x: rect.frame.midX, y: rect.frame.midY)
                 }
             }
 
