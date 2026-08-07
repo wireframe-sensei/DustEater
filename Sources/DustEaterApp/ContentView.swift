@@ -259,67 +259,96 @@ struct MainContentView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            VStack(spacing: DustEaterTheme.Spacing.sm) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if let zoomNode = coordinator.zoomNode {
-                            Text(zoomNode.name)
-                                .font(DustEaterTheme.Typography.headline)
-                                .lineLimit(1)
-                            Text(zoomNode.path)
+        HStack(spacing: 0) {
+            // Sidebar: File tree for navigation
+            VStack(spacing: 0) {
+                VStack(spacing: DustEaterTheme.Spacing.sm) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Files & Folders")
                                 .font(DustEaterTheme.Typography.caption)
                                 .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+                                .tracking(0.5)
+
+                            Text(root.name)
+                                .font(DustEaterTheme.Typography.headline)
                                 .lineLimit(1)
-                                .truncationMode(.middle)
-                        } else {
-                            HStack(spacing: DustEaterTheme.Spacing.sm) {
-                                Text("Disk Usage")
+                        }
+                        Spacer()
+                    }
+                }
+                .padding(DustEaterTheme.Spacing.md)
+                .background(.ultraThinMaterial)
+
+                Divider()
+
+                FileTreeListView(root: displayRoot, selectedPath: $selectedPath)
+            }
+            .frame(minWidth: 280, maxWidth: 350)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
+
+            // Main treemap with hierarchical levels
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: DustEaterTheme.Spacing.sm) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Hierarchy View")
+                                .font(DustEaterTheme.Typography.caption)
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+                                .tracking(0.5)
+
+                            if let zoomNode = coordinator.zoomNode {
+                                Text(zoomNode.name)
                                     .font(DustEaterTheme.Typography.headline)
-                                Text("• Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
-                                    .font(DustEaterTheme.Typography.caption)
-                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            } else {
+                                HStack(spacing: DustEaterTheme.Spacing.sm) {
+                                    Text("Overview")
+                                        .font(DustEaterTheme.Typography.headline)
+                                    Text("• Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
+                                        .font(DustEaterTheme.Typography.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
-                    }
 
-                    Spacer()
+                        Spacer()
 
-                    HStack(spacing: DustEaterTheme.Spacing.md) {
                         if coordinator.zoomNode != nil {
                             Button {
                                 coordinator.zoomNode = nil
                                 selectedPath = root.path
                             } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "chevron.left")
-                                    Text("Back")
-                                }
+                                Image(systemName: "chevron.left")
                             }
-                            .buttonStyle(.bordered)
                             .keyboardShortcut(.escape)
+                            .help("Back to overview")
                         }
                     }
                 }
-            }
-            .padding(DustEaterTheme.Spacing.md)
-            .background(.ultraThinMaterial)
+                .padding(DustEaterTheme.Spacing.md)
+                .background(.ultraThinMaterial)
 
-            Divider()
+                Divider()
 
-            // Full-width treemap
-            GeometryReader { geometry in
-                TreemapView(
-                    rects: treemapRects(geometry.size),
-                    rootPath: (coordinator.zoomNode ?? root).path,
-                    onSelectNode: { node in
-                        if node.isDirectory {
-                            coordinator.zoomNode = node
-                            selectedPath = node.path
+                // Hierarchical treemap
+                GeometryReader { geometry in
+                    TreemapView(
+                        rects: treemapRects(geometry.size),
+                        rootPath: (coordinator.zoomNode ?? root).path,
+                        onSelectNode: { node in
+                            if node.isDirectory {
+                                coordinator.zoomNode = node
+                                selectedPath = node.path
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
