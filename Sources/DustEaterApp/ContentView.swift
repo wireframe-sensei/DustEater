@@ -384,7 +384,11 @@ struct MainContentView: View {
                 Divider()
 
                 FileTreeOutlineView(root: displayRoot, selectedPath: $selectedPath) { node in
-                    coordinator.zoomNode = node
+                    // Only zoom into directories, not files
+                    if node.isDirectory {
+                        coordinator.zoomNode = node
+                    }
+                    // Files just get highlighted in the current view
                 }
             }
             .frame(minWidth: 280, maxWidth: 350)
