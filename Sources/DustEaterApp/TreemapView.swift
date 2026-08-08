@@ -8,7 +8,9 @@ struct TreemapView: View {
     let onSelectNode: (FileNode) -> Void
     let theme: ColorTheme
     @State private var hoveredId: String?
+    @State private var previousHoveredId: String?
     @State private var mouseLocation: CGPoint = .zero
+    @State private var showTooltip = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -29,14 +31,30 @@ struct TreemapView: View {
             .onContinuousHover { phase in
                 if case .active(let location) = phase {
                     mouseLocation = location
-                    hoveredId = rects.first { $0.contains(point: location) }?.id
-                    if hoveredId != nil {
-                        NSCursor.pointingHand.set()
-                    } else {
-                        NSCursor.arrow.set()
+                    let newHoveredId = rects.first { $0.contains(point: location) }?.id
+
+                    // Only trigger animation when tile changes
+                    if newHoveredId != hoveredId {
+                        previousHoveredId = hoveredId
+                        hoveredId = newHoveredId
+
+                        if newHoveredId != nil {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                showTooltip = true
+                            }
+                            NSCursor.pointingHand.set()
+                        } else {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                showTooltip = false
+                            }
+                            NSCursor.arrow.set()
+                        }
                     }
                 } else {
                     hoveredId = nil
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showTooltip = false
+                    }
                     NSCursor.arrow.set()
                 }
             }
@@ -65,8 +83,8 @@ struct TreemapView: View {
                 }
             }
 
-            // Tooltip for hovered item
-            if let hoveredId, let hovered = rects.first(where: { $0.id == hoveredId }) {
+            // Tooltip for hovered item with smooth animation
+            if showTooltip, let hoveredId, let hovered = rects.first(where: { $0.id == hoveredId }) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(hovered.node.name)
                         .font(.system(size: 14, weight: .semibold, design: .default))
@@ -102,8 +120,9 @@ struct TreemapView: View {
                 .background(Color(nsColor: .controlBackgroundColor))
                 .cornerRadius(10)
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
-                .offset(x: 12, y: -35)
+                .offset(x: 20, y: -50)
                 .position(x: mouseLocation.x, y: mouseLocation.y)
+                .opacity(showTooltip ? 1.0 : 0.0)
             }
         }
     }
