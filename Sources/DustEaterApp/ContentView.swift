@@ -326,10 +326,7 @@ struct MainContentView: View {
                                 HStack(spacing: DustEaterTheme.Spacing.sm) {
                                     Text("Overview")
                                         .font(DustEaterTheme.Typography.headline)
-                                    Text("• \(selectedTheme.displayName) •")
-                                        .font(DustEaterTheme.Typography.caption)
-                                        .foregroundStyle(.secondary)
-                                    Text("Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
+                                    Text("• Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
                                         .font(DustEaterTheme.Typography.caption)
                                         .foregroundStyle(.secondary)
                                 }
