@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Theme for treemap colors
+/// Theme for treemap colors with truly distinct palettes
 public enum ColorTheme: String, CaseIterable {
     case vibrant = "Vibrant"
     case pastel = "Pastel"
-    case dark = "Dark"
-    case heatmap = "Heatmap"
-    case ocean = "Ocean"
-    case forest = "Forest"
+    case neon = "Neon"
+    case warm = "Warm"
+    case cool = "Cool"
+    case rainbow = "Rainbow"
 
     public var displayName: String {
         self.rawValue
@@ -18,51 +18,51 @@ public enum ColorTheme: String, CaseIterable {
         switch self {
         case .vibrant:
             return [
-                Color(red: 0.2, green: 0.6, blue: 1.0),
-                Color(red: 0.2, green: 0.8, blue: 0.6),
-                Color(red: 0.4, green: 0.8, blue: 0.2),
-                Color(red: 1.0, green: 0.8, blue: 0.2),
-                Color(red: 1.0, green: 0.6, blue: 0.2),
+                Color(red: 0.2, green: 0.6, blue: 1.0),   // Bright Blue
+                Color(red: 0.2, green: 0.8, blue: 0.6),   // Teal
+                Color(red: 0.4, green: 0.8, blue: 0.2),   // Lime Green
+                Color(red: 1.0, green: 0.8, blue: 0.2),   // Bright Yellow
+                Color(red: 1.0, green: 0.6, blue: 0.2),   // Bright Orange
             ]
         case .pastel:
             return [
-                Color(red: 0.7, green: 0.8, blue: 1.0),
-                Color(red: 0.7, green: 0.95, blue: 0.85),
-                Color(red: 0.8, green: 0.95, blue: 0.6),
-                Color(red: 1.0, green: 0.95, blue: 0.6),
-                Color(red: 1.0, green: 0.85, blue: 0.7),
+                Color(red: 1.0, green: 0.7, blue: 0.7),   // Pastel Pink
+                Color(red: 1.0, green: 0.9, blue: 0.6),   // Pastel Peach
+                Color(red: 0.7, green: 1.0, blue: 0.7),   // Pastel Green
+                Color(red: 0.7, green: 0.9, blue: 1.0),   // Pastel Blue
+                Color(red: 0.95, green: 0.8, blue: 1.0),  // Pastel Lavender
             ]
-        case .dark:
+        case .neon:
             return [
-                Color(red: 0.2, green: 0.4, blue: 0.8),
-                Color(red: 0.1, green: 0.6, blue: 0.5),
-                Color(red: 0.3, green: 0.6, blue: 0.1),
-                Color(red: 0.8, green: 0.6, blue: 0.1),
-                Color(red: 0.8, green: 0.4, blue: 0.1),
+                Color(red: 0.0, green: 1.0, blue: 1.0),   // Neon Cyan
+                Color(red: 0.0, green: 1.0, blue: 0.5),   // Neon Green
+                Color(red: 1.0, green: 0.0, blue: 1.0),   // Neon Magenta
+                Color(red: 1.0, green: 1.0, blue: 0.0),   // Neon Yellow
+                Color(red: 1.0, green: 0.5, blue: 0.0),   // Neon Orange
             ]
-        case .heatmap:
+        case .warm:
             return [
-                Color(red: 0.2, green: 0.2, blue: 0.8),
-                Color(red: 0.2, green: 0.6, blue: 0.8),
-                Color(red: 0.2, green: 0.8, blue: 0.2),
-                Color(red: 0.8, green: 0.8, blue: 0.2),
-                Color(red: 0.8, green: 0.2, blue: 0.2),
+                Color(red: 1.0, green: 0.4, blue: 0.2),   // Warm Red-Orange
+                Color(red: 1.0, green: 0.6, blue: 0.1),   // Warm Orange
+                Color(red: 1.0, green: 0.8, blue: 0.1),   // Warm Gold
+                Color(red: 0.9, green: 0.7, blue: 0.3),   // Warm Yellow
+                Color(red: 0.8, green: 0.5, blue: 0.2),   // Warm Brown
             ]
-        case .ocean:
+        case .cool:
             return [
-                Color(red: 0.0, green: 0.3, blue: 0.6),
-                Color(red: 0.0, green: 0.5, blue: 0.7),
-                Color(red: 0.0, green: 0.7, blue: 0.6),
-                Color(red: 0.2, green: 0.8, blue: 0.5),
-                Color(red: 0.5, green: 0.8, blue: 0.2),
+                Color(red: 0.1, green: 0.3, blue: 0.8),   // Cool Dark Blue
+                Color(red: 0.2, green: 0.5, blue: 1.0),   // Cool Blue
+                Color(red: 0.0, green: 0.7, blue: 0.8),   // Cool Cyan
+                Color(red: 0.2, green: 0.8, blue: 0.7),   // Cool Teal
+                Color(red: 0.3, green: 0.9, blue: 0.6),   // Cool Green
             ]
-        case .forest:
+        case .rainbow:
             return [
-                Color(red: 0.1, green: 0.4, blue: 0.2),
-                Color(red: 0.2, green: 0.5, blue: 0.3),
-                Color(red: 0.3, green: 0.6, blue: 0.2),
-                Color(red: 0.5, green: 0.7, blue: 0.2),
-                Color(red: 0.7, green: 0.6, blue: 0.1),
+                Color(red: 1.0, green: 0.0, blue: 0.0),   // Red
+                Color(red: 1.0, green: 0.5, blue: 0.0),   // Orange
+                Color(red: 1.0, green: 1.0, blue: 0.0),   // Yellow
+                Color(red: 0.0, green: 0.8, blue: 0.0),   // Green
+                Color(red: 0.0, green: 0.0, blue: 1.0),   // Blue
             ]
         }
     }
@@ -72,63 +72,63 @@ public enum ColorTheme: String, CaseIterable {
         switch self {
         case .vibrant:
             return [
-                "app": Color(red: 0.8, green: 0.2, blue: 0.8),
-                "archive": Color(red: 0.8, green: 0.4, blue: 0.2),
-                "video": Color(red: 0.9, green: 0.3, blue: 0.3),
-                "audio": Color(red: 0.7, green: 0.3, blue: 0.7),
-                "image": Color(red: 0.3, green: 0.6, blue: 0.9),
-                "document": Color(red: 0.6, green: 0.6, blue: 0.6),
-                "other": Color(red: 0.5, green: 0.5, blue: 0.5),
+                "app": Color(red: 0.8, green: 0.2, blue: 0.8),      // Magenta
+                "archive": Color(red: 0.8, green: 0.4, blue: 0.2),  // Brown
+                "video": Color(red: 0.9, green: 0.3, blue: 0.3),    // Red
+                "audio": Color(red: 0.7, green: 0.3, blue: 0.7),    // Purple
+                "image": Color(red: 0.3, green: 0.6, blue: 0.9),    // Light Blue
+                "document": Color(red: 0.6, green: 0.6, blue: 0.6),  // Gray
+                "other": Color(red: 0.5, green: 0.5, blue: 0.5),    // Dark Gray
             ]
         case .pastel:
             return [
-                "app": Color(red: 0.95, green: 0.7, blue: 0.95),
-                "archive": Color(red: 0.95, green: 0.8, blue: 0.7),
-                "video": Color(red: 0.95, green: 0.75, blue: 0.75),
-                "audio": Color(red: 0.9, green: 0.75, blue: 0.9),
-                "image": Color(red: 0.75, green: 0.85, blue: 0.95),
-                "document": Color(red: 0.85, green: 0.85, blue: 0.85),
-                "other": Color(red: 0.8, green: 0.8, blue: 0.8),
+                "app": Color(red: 1.0, green: 0.85, blue: 0.95),    // Lavender
+                "archive": Color(red: 1.0, green: 0.9, blue: 0.8),  // Peach
+                "video": Color(red: 1.0, green: 0.85, blue: 0.85),  // Light Pink
+                "audio": Color(red: 0.9, green: 0.85, blue: 1.0),   // Light Purple
+                "image": Color(red: 0.85, green: 0.95, blue: 1.0),  // Light Blue
+                "document": Color(red: 0.9, green: 0.9, blue: 0.9), // Light Gray
+                "other": Color(red: 0.85, green: 0.85, blue: 0.85), // Medium Gray
             ]
-        case .dark:
+        case .neon:
             return [
-                "app": Color(red: 0.6, green: 0.1, blue: 0.6),
-                "archive": Color(red: 0.6, green: 0.3, blue: 0.1),
-                "video": Color(red: 0.7, green: 0.2, blue: 0.2),
-                "audio": Color(red: 0.5, green: 0.2, blue: 0.5),
-                "image": Color(red: 0.2, green: 0.4, blue: 0.7),
-                "document": Color(red: 0.4, green: 0.4, blue: 0.4),
-                "other": Color(red: 0.3, green: 0.3, blue: 0.3),
+                "app": Color(red: 1.0, green: 0.0, blue: 0.8),      // Neon Pink
+                "archive": Color(red: 1.0, green: 0.65, blue: 0.0), // Neon Orange
+                "video": Color(red: 1.0, green: 0.0, blue: 0.0),    // Neon Red
+                "audio": Color(red: 1.0, green: 0.0, blue: 1.0),    // Neon Magenta
+                "image": Color(red: 0.0, green: 1.0, blue: 1.0),    // Neon Cyan
+                "document": Color(red: 0.5, green: 0.5, blue: 0.5), // Gray
+                "other": Color(red: 0.4, green: 0.4, blue: 0.4),    // Dark Gray
             ]
-        case .heatmap:
+        case .warm:
             return [
-                "app": Color(red: 0.8, green: 0.1, blue: 0.8),
-                "archive": Color(red: 0.8, green: 0.5, blue: 0.1),
-                "video": Color(red: 0.9, green: 0.2, blue: 0.2),
-                "audio": Color(red: 0.7, green: 0.2, blue: 0.7),
-                "image": Color(red: 0.2, green: 0.5, blue: 0.9),
-                "document": Color(red: 0.5, green: 0.5, blue: 0.5),
-                "other": Color(red: 0.4, green: 0.4, blue: 0.4),
+                "app": Color(red: 1.0, green: 0.3, blue: 0.4),      // Warm Red
+                "archive": Color(red: 1.0, green: 0.5, blue: 0.2),  // Warm Orange
+                "video": Color(red: 0.9, green: 0.2, blue: 0.3),    // Warm Dark Red
+                "audio": Color(red: 1.0, green: 0.6, blue: 0.5),    // Warm Salmon
+                "image": Color(red: 0.8, green: 0.6, blue: 0.4),    // Warm Tan
+                "document": Color(red: 0.7, green: 0.7, blue: 0.7), // Gray
+                "other": Color(red: 0.6, green: 0.6, blue: 0.6),    // Dark Gray
             ]
-        case .ocean:
+        case .cool:
             return [
-                "app": Color(red: 0.0, green: 0.4, blue: 0.8),
-                "archive": Color(red: 0.0, green: 0.6, blue: 0.8),
-                "video": Color(red: 0.2, green: 0.7, blue: 0.6),
-                "audio": Color(red: 0.0, green: 0.5, blue: 0.6),
-                "image": Color(red: 0.0, green: 0.8, blue: 0.8),
-                "document": Color(red: 0.4, green: 0.5, blue: 0.6),
-                "other": Color(red: 0.3, green: 0.4, blue: 0.5),
+                "app": Color(red: 0.2, green: 0.5, blue: 1.0),      // Cool Blue
+                "archive": Color(red: 0.0, green: 0.7, blue: 0.8),  // Cool Cyan
+                "video": Color(red: 0.1, green: 0.4, blue: 0.9),    // Cool Dark Blue
+                "audio": Color(red: 0.3, green: 0.8, blue: 0.8),    // Cool Teal
+                "image": Color(red: 0.2, green: 0.9, blue: 0.6),    // Cool Green
+                "document": Color(red: 0.5, green: 0.5, blue: 0.5), // Gray
+                "other": Color(red: 0.4, green: 0.4, blue: 0.4),    // Dark Gray
             ]
-        case .forest:
+        case .rainbow:
             return [
-                "app": Color(red: 0.2, green: 0.5, blue: 0.3),
-                "archive": Color(red: 0.4, green: 0.5, blue: 0.2),
-                "video": Color(red: 0.5, green: 0.4, blue: 0.2),
-                "audio": Color(red: 0.3, green: 0.4, blue: 0.2),
-                "image": Color(red: 0.2, green: 0.6, blue: 0.5),
-                "document": Color(red: 0.5, green: 0.5, blue: 0.4),
-                "other": Color(red: 0.4, green: 0.4, blue: 0.3),
+                "app": Color(red: 1.0, green: 0.0, blue: 1.0),      // Magenta
+                "archive": Color(red: 1.0, green: 0.65, blue: 0.0), // Orange
+                "video": Color(red: 1.0, green: 0.0, blue: 0.0),    // Red
+                "audio": Color(red: 0.5, green: 0.0, blue: 1.0),    // Purple
+                "image": Color(red: 0.0, green: 0.5, blue: 1.0),    // Blue
+                "document": Color(red: 0.5, green: 0.5, blue: 0.5), // Gray
+                "other": Color(red: 0.4, green: 0.4, blue: 0.4),    // Dark Gray
             ]
         }
     }
