@@ -288,11 +288,17 @@ struct MainContentView: View {
                 VStack(spacing: DustEaterTheme.Spacing.sm) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Files & Folders")
-                                .font(DustEaterTheme.Typography.caption)
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .tracking(0.5)
+                            HStack(spacing: 4) {
+                                Text("Files & Folders")
+                                    .font(DustEaterTheme.Typography.caption)
+                                    .foregroundStyle(.secondary)
+                                    .textCase(.uppercase)
+                                    .tracking(0.5)
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                    .help("Folder sizes may exceed total disk usage due to hard links")
+                            }
 
                             Text(root.name)
                                 .font(DustEaterTheme.Typography.headline)
