@@ -352,6 +352,11 @@ struct MainContentView: View {
         sortedRoot ?? root
     }
 
+    private var selectedNode: FileNode? {
+        guard let selectedPath else { return nil }
+        return displayRoot.find(path: selectedPath)
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             // Sidebar: File tree for navigation
@@ -478,19 +483,25 @@ struct MainContentView: View {
 
                 Divider()
 
-                // Hierarchical treemap
-                GeometryReader { geometry in
-                    TreemapView(
-                        rects: treemapRects(geometry.size),
-                        rootPath: (coordinator.zoomNode ?? root).path,
-                        onSelectNode: { node in
-                            if node.isDirectory {
-                                coordinator.zoomNode = node
-                                selectedPath = node.path
-                            }
-                        },
-                        theme: selectedTheme
-                    )
+                // Hierarchical treemap or file details
+                if let selectedNode = selectedNode, !selectedNode.isDirectory {
+                    // Show file details when a file is selected
+                    FileDetailsView(node: selectedNode, root: root)
+                } else {
+                    // Show treemap for directories and overview
+                    GeometryReader { geometry in
+                        TreemapView(
+                            rects: treemapRects(geometry.size),
+                            rootPath: (coordinator.zoomNode ?? root).path,
+                            onSelectNode: { node in
+                                if node.isDirectory {
+                                    coordinator.zoomNode = node
+                                    selectedPath = node.path
+                                }
+                            },
+                            theme: selectedTheme
+                        )
+                    }
                 }
             }
         }
