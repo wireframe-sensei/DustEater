@@ -4,6 +4,7 @@ import DustEaterCore
 struct FileTreeListView: View {
     let root: FileNode
     @Binding var selectedPath: String?
+    let onSelectNode: (FileNode) -> Void
 
     var body: some View {
         List(selection: $selectedPath) {
@@ -13,12 +14,28 @@ struct FileTreeListView: View {
             }
         }
         .listStyle(.sidebar)
+        .onChange(of: selectedPath) { oldPath, newPath in
+            // When selection changes, find the node and notify
+            if let newPath, let node = root.find(path: newPath) {
+                onSelectNode(node)
+            }
+        }
     }
 }
 
 private extension FileNode {
     var outlineChildren: [FileNode]? {
         children.isEmpty ? nil : children
+    }
+
+    func find(path: String) -> FileNode? {
+        if self.path == path { return self }
+        for child in children {
+            if let found = child.find(path: path) {
+                return found
+            }
+        }
+        return nil
     }
 }
 

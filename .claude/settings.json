@@ -106,7 +106,13 @@
       "Bash(git commit -m 'Add doughnut progress ring to scanning state view *)",
       "Bash(git commit -m 'Animate doughnut progress ring continuously *)",
       "Bash(git commit -m 'Update progress ring to show real scan progress 0-100% *)",
-      "Bash(git commit -m 'Update progress ring to use actual disk size for 0-100% progress *)"
+      "Bash(git commit -m 'Update progress ring to use actual disk size for 0-100% progress *)",
+      "Bash(xcodebuild -scheme DustEater -configuration Debug -derivedDataPath .build)",
+      "Bash(xcodebuild -list)",
+      "Bash(xcodebuild -scheme DustEaterApp -configuration Debug -derivedDataPath .build)",
+      "Bash(xcodebuild -scheme DustEaterApp -configuration Debug -destination 'generic/platform=macOS' -derivedDataPath .build)",
+      "Bash(open /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/.build/Build/Products/Debug/DustEaterApp)",
+      "Bash(pkill -f DustEaterApp)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

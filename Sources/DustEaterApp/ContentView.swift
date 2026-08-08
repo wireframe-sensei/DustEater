@@ -378,7 +378,9 @@ struct MainContentView: View {
 
                 Divider()
 
-                FileTreeListView(root: displayRoot, selectedPath: $selectedPath)
+                FileTreeListView(root: displayRoot, selectedPath: $selectedPath) { node in
+                    coordinator.zoomNode = node
+                }
             }
             .frame(minWidth: 280, maxWidth: 350)
             .background(Color(nsColor: .controlBackgroundColor))
@@ -393,7 +395,7 @@ struct MainContentView: View {
                         if coordinator.zoomNode != nil {
                             Button {
                                 coordinator.zoomNode = nil
-                                selectedPath = root.path
+                                selectedPath = nil
                             } label: {
                                 Image(systemName: "chevron.left")
                             }
