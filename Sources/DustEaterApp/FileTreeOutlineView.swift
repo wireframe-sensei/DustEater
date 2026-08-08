@@ -75,32 +75,26 @@ class FileTreeCell: NSTableCellView {
     }
 
     private func setupCell() {
-        // Use simple frame-based layout without constraints for performance
-        let iconView = NSImageView(frame: NSRect(x: 4, y: 0, width: 16, height: 20))
-        iconView.autoresizingMask = []
-        addSubview(iconView)
+        // Simple layout: NSOutlineView handles icon automatically
+        // We just need to set textField and sizeField
 
-        let sizeField = NSTextField(frame: NSRect(x: bounds.width - 80, y: 0, width: 76, height: 20))
+        let textField = NSTextField()
+        textField.isBezeled = false
+        textField.drawsBackground = false
+        textField.isEditable = false
+        textField.font = .systemFont(ofSize: 13)
+        textField.lineBreakMode = .byTruncatingTail
+        addSubview(textField)
+        self.textField = textField
+
+        let sizeField = NSTextField()
         sizeField.isBezeled = false
         sizeField.drawsBackground = false
         sizeField.isEditable = false
         sizeField.font = .systemFont(ofSize: 11)
         sizeField.textColor = .secondaryLabelColor
         sizeField.alignment = .right
-        sizeField.autoresizingMask = [.minXMargin]
         addSubview(sizeField)
-
-        let textField = NSTextField(frame: NSRect(x: 28, y: 0, width: bounds.width - 110, height: 20))
-        textField.isBezeled = false
-        textField.drawsBackground = false
-        textField.isEditable = false
-        textField.font = .systemFont(ofSize: 13)
-        textField.lineBreakMode = .byTruncatingTail
-        textField.autoresizingMask = [.width]
-        addSubview(textField)
-
-        self.imageView = iconView
-        self.textField = textField
         self.sizeField = sizeField
     }
 
