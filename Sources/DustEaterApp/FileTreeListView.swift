@@ -1,125 +1,33 @@
 import SwiftUI
 import DustEaterCore
 
-// Reference type to track expanded paths (better for SwiftUI state detection)
-class ExpandedPathsManager: ObservableObject {
-    @Published var expandedPaths: Set<String> = []
-
-    func isExpanded(_ path: String) -> Bool {
-        expandedPaths.contains(path)
-    }
-
-    func toggle(_ path: String) {
-        if expandedPaths.contains(path) {
-            expandedPaths.remove(path)
-        } else {
-            expandedPaths.insert(path)
-        }
-    }
-
-    func expand(_ path: String) {
-        expandedPaths.insert(path)
-    }
-
-    func expandPath(_ path: String) {
-        // Expand all parents of this path
-        var pathComponents = path.split(separator: "/").map(String.init)
-        pathComponents.removeLast()
-
-        var currentPath = ""
-        for component in pathComponents {
-            currentPath.append("/")
-            currentPath.append(component)
-            expandedPaths.insert(currentPath)
-        }
-    }
-}
-
 struct FileTreeListView: View {
     let root: FileNode
     @Binding var selectedPath: String?
     let onSelectNode: (FileNode) -> Void
-    @StateObject private var expandedManager = ExpandedPathsManager()
 
     var body: some View {
         List(selection: $selectedPath) {
-            TreeNodeView(
-                node: root,
-                isRoot: true,
-                selectedPath: $selectedPath,
-                expandedManager: expandedManager,
-                onSelectNode: onSelectNode,
-                rootSize: root.size
-            )
-        }
-        .listStyle(.sidebar)
-        .onChange(of: selectedPath) { _, newPath in
-            if let newPath {
-                // Expand all parent paths
-                expandedManager.expandPath(newPath)
-
-                // Find and notify the node
-                if let node = root.find(path: newPath) {
-                    onSelectNode(node)
-                }
-            }
-        }
-    }
-}
-
-// Recursive tree node view with expansion control
-struct TreeNodeView: View {
-    let node: FileNode
-    let isRoot: Bool
-    @Binding var selectedPath: String?
-    @ObservedObject var expandedManager: ExpandedPathsManager
-    let onSelectNode: (FileNode) -> Void
-    let rootSize: Int64
-
-    var body: some View {
-        if isRoot {
-            // Root node: show children directly
-            ForEach(node.children, id: \.path) { child in
-                TreeNodeView(
-                    node: child,
-                    isRoot: false,
-                    selectedPath: $selectedPath,
-                    expandedManager: expandedManager,
-                    onSelectNode: onSelectNode,
-                    rootSize: rootSize
-                )
-            }
-        } else if node.isDirectory && !node.children.isEmpty {
-            // Directory with children: use DisclosureGroup
-            DisclosureGroup(
-                isExpanded: Binding(
-                    get: { expandedManager.isExpanded(node.path) },
-                    set: { _ in expandedManager.toggle(node.path) }
-                )
-            ) {
-                ForEach(node.children, id: \.path) { child in
-                    TreeNodeView(
-                        node: child,
-                        isRoot: false,
-                        selectedPath: $selectedPath,
-                        expandedManager: expandedManager,
-                        onSelectNode: onSelectNode,
-                        rootSize: rootSize
-                    )
-                }
-            } label: {
-                FileRowView(node: node, parentSize: rootSize)
+            OutlineGroup(root.children, id: \.path, children: \.outlineChildren) { node in
+                FileRowView(node: node, parentSize: root.size)
                     .tag(node.path)
             }
-        } else {
-            // Leaf node or file
-            FileRowView(node: node, parentSize: rootSize)
-                .tag(node.path)
+        }
+        .listStyle(.sidebar)
+        .onChange(of: selectedPath) { oldPath, newPath in
+            // When selection changes, find the node and notify
+            if let newPath, let node = root.find(path: newPath) {
+                onSelectNode(node)
+            }
         }
     }
 }
 
 private extension FileNode {
+    var outlineChildren: [FileNode]? {
+        children.isEmpty ? nil : children
+    }
+
     func find(path: String) -> FileNode? {
         if self.path == path { return self }
         for child in children {

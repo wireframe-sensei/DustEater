@@ -383,7 +383,7 @@ struct MainContentView: View {
 
                 Divider()
 
-                FileTreeOutlineView(root: displayRoot, selectedPath: $selectedPath) { node in
+                FileTreeListView(root: displayRoot, selectedPath: $selectedPath) { node in
                     // Only zoom into directories, not files
                     if node.isDirectory {
                         coordinator.zoomNode = node
