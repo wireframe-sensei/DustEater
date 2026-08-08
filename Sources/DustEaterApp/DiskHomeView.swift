@@ -39,6 +39,29 @@ struct DiskHomeView: View {
                         .font(.system(size: 15, weight: .regular, design: .default))
                         .foregroundStyle(.secondary)
                 }
+
+                // Info note about usage differences
+                VStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.blue.opacity(0.7))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Note about disk usage")
+                                .font(.system(size: 12, weight: .semibold, design: .default))
+                            Text("Folder sizes may differ slightly from system storage due to APFS snapshots, system reserved space, and filesystem overhead.")
+                                .font(.system(size: 11, weight: .regular, design: .default))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .padding(.horizontal, 4)
             }
             .padding(.top, 48)
             .padding(.bottom, 40)
