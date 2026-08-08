@@ -4,7 +4,7 @@ import DustEaterCore
 
 // MARK: - NSOutlineView Data Source
 class FileTreeDataSource: NSObject, NSOutlineViewDataSource {
-    let root: FileNode
+    var root: FileNode
     var expandedPaths: Set<String> = []
 
     init(root: FileNode) {
@@ -32,6 +32,7 @@ class FileTreeDelegate: NSObject, NSOutlineViewDelegate {
     var onSelectNode: (FileNode) -> Void = { _ in }
     var expandedPaths: Set<String> = []
     weak var outlineView: NSOutlineView?
+    private var visibleCells: NSHashTable<FileTreeCell> = NSHashTable(options: .weakMemory)
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         guard let node = item as? FileNode else { return nil }
@@ -40,6 +41,11 @@ class FileTreeDelegate: NSObject, NSOutlineViewDelegate {
             ?? FileTreeCell()
 
         cell.node = node
+
+        // Setup tooltip tracking for this visible cell
+        cell.setupTooltipTracking()
+        visibleCells.add(cell)
+
         return cell
     }
 
@@ -65,6 +71,7 @@ class FileTreeCell: NSTableCellView {
     }
 
     private var trackingArea: NSTrackingArea?
+    private var hasTrackingArea = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -76,18 +83,29 @@ class FileTreeCell: NSTableCellView {
         setupCell()
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
+    // Lazy tracking area setup - call this only for visible cells
+    func setupTooltipTracking() {
+        guard !hasTrackingArea else { return }
 
         if let trackingArea = trackingArea {
             removeTrackingArea(trackingArea)
         }
 
-        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseEnteredAndExited]
+        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect]
         trackingArea = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
         if let trackingArea = trackingArea {
             addTrackingArea(trackingArea)
+            hasTrackingArea = true
         }
+    }
+
+    func removeTooltipTracking() {
+        if let trackingArea = trackingArea {
+            removeTrackingArea(trackingArea)
+            self.trackingArea = nil
+            hasTrackingArea = false
+        }
+        toolTip = nil
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -210,6 +228,10 @@ struct FileTreeOutlineView: NSViewRepresentable {
 
         context.coordinator.delegate.onSelectNode = onSelectNode
         context.coordinator.delegate.outlineView = outlineView
+
+        // Update data source if root changed
+        context.coordinator.dataSource.root = root
+        outlineView.reloadData()
 
         // Update selection
         if let selectedPath = selectedPath, let node = root.find(path: selectedPath) {
