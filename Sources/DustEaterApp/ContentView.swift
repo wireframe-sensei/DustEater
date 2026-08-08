@@ -172,7 +172,14 @@ struct IdleStateView: View {
 struct ScanningStateView: View {
     let progress: ScanProgressSnapshot
     let onCancel: () -> Void
-    @State private var rotation: Double = 0
+
+    var progressRatio: Double {
+        // Use logarithmic scale for items scanned to show smooth progress
+        // Maps ~1 item to ~0.01 progress, increasing logarithmically
+        let itemsDouble = Double(progress.itemsScanned)
+        let logProgress = log10(itemsDouble + 1) / 6.0  // 6 is log10(1,000,000)
+        return min(0.99, max(0.01, logProgress))  // Never reach 100% until scan completes
+    }
 
     var body: some View {
         ZStack {
@@ -195,9 +202,9 @@ struct ScanningStateView: View {
                         .stroke(Color.white.opacity(0.1), lineWidth: 12)
                         .frame(width: 280, height: 280)
 
-                    // Doughnut progress ring (animated rotating)
+                    // Doughnut progress ring (animated to progress)
                     Circle()
-                        .trim(from: 0, to: 0.3)
+                        .trim(from: 0, to: progressRatio)
                         .stroke(
                             LinearGradient(
                                 gradient: Gradient(colors: [.blue, .blue.opacity(0.6)]),
@@ -207,12 +214,8 @@ struct ScanningStateView: View {
                             style: StrokeStyle(lineWidth: 12, lineCap: .round)
                         )
                         .frame(width: 280, height: 280)
-                        .rotationEffect(.degrees(rotation))
-                        .onAppear {
-                            withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
-                                rotation = 360
-                            }
-                        }
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeInOut(duration: 0.5), value: progressRatio)
 
                     // Center content
                     VStack(spacing: DustEaterTheme.Spacing.md) {

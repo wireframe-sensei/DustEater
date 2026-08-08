@@ -104,7 +104,8 @@
       "Bash(git commit -m 'Redesign app with macOS Sequoia glass morphism aesthetic *)",
       "Bash(git commit -m 'Improve tooltip offset and add smooth bezier animation *)",
       "Bash(git commit -m 'Add doughnut progress ring to scanning state view *)",
-      "Bash(git commit -m 'Animate doughnut progress ring continuously *)"
+      "Bash(git commit -m 'Animate doughnut progress ring continuously *)",
+      "Bash(git commit -m 'Update progress ring to show real scan progress 0-100% *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"
