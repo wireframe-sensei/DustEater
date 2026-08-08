@@ -174,32 +174,73 @@ struct ScanningStateView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(spacing: DustEaterTheme.Spacing.lg) {
-            ProgressView()
-                .scaleEffect(1.3)
+        ZStack {
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(red: 0.08, green: 0.08, blue: 0.1),
+                    Color(red: 0.1, green: 0.1, blue: 0.12)
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
-            VStack(spacing: DustEaterTheme.Spacing.md) {
-                Text("\(progress.itemsScanned) items scanned")
-                    .font(DustEaterTheme.Typography.headline)
+            VStack(spacing: 0) {
+                Spacer()
 
-                Text(ByteFormatter.string(fromBytes: progress.bytesScanned))
-                    .font(DustEaterTheme.Typography.title3)
-                    .foregroundStyle(.blue)
+                ZStack {
+                    // Doughnut progress ring background
+                    Circle()
+                        .stroke(Color.white.opacity(0.1), lineWidth: 12)
+                        .frame(width: 280, height: 280)
 
-                Text(progress.currentPath)
-                    .font(DustEaterTheme.Typography.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 400)
+                    // Doughnut progress ring (animated)
+                    Circle()
+                        .trim(from: 0, to: 0.5) // Progress placeholder, would be dynamic in real app
+                        .stroke(
+                            LinearGradient(
+                                gradient: Gradient(colors: [.blue, .blue.opacity(0.6)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                        )
+                        .frame(width: 280, height: 280)
+                        .rotationEffect(.degrees(-90))
+
+                    // Center content
+                    VStack(spacing: DustEaterTheme.Spacing.md) {
+                        ProgressView()
+                            .scaleEffect(1.3)
+
+                        VStack(spacing: 8) {
+                            Text("\(progress.itemsScanned) items scanned")
+                                .font(.system(size: 15, weight: .semibold, design: .default))
+                                .foregroundStyle(.primary)
+
+                            Text(ByteFormatter.string(fromBytes: progress.bytesScanned))
+                                .font(.system(size: 18, weight: .semibold, design: .default))
+                                .foregroundStyle(.blue)
+
+                            Text(progress.currentPath)
+                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: 300)
+                        }
+                    }
+                    .frame(width: 240)
+                }
+
+                Spacer()
+
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.bordered)
+                    .padding(.bottom, DustEaterTheme.Spacing.lg)
             }
-
-            Button("Cancel", action: onCancel)
-                .buttonStyle(.bordered)
-                .padding(.top, DustEaterTheme.Spacing.md)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
     }
 }
 
