@@ -113,7 +113,12 @@
       "Bash(xcodebuild -scheme DustEaterApp -configuration Debug -destination 'generic/platform=macOS' -derivedDataPath .build)",
       "Bash(open /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/.build/Build/Products/Debug/DustEaterApp)",
       "Bash(pkill -f DustEaterApp)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "WebSearch",
+      "WebFetch(domain:nilcoalescing.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.appcoda.com)",
+      "WebFetch(domain:swiftwithmajid.com)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

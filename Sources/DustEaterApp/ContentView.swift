@@ -76,7 +76,10 @@ struct ContentView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .scanning(let progress):
-                    ScanningStateView(progress: progress, totalDiskSize: totalDiskSize, onCancel: coordinator.cancelScan)
+                    ScanningStateView(progress: progress, totalDiskSize: totalDiskSize, onCancel: {
+                        coordinator.cancelScan()
+                        isOnHome = true
+                    })
                 case .finished(let root):
                     MainContentView(
                         root: root,
@@ -378,7 +381,7 @@ struct MainContentView: View {
 
                 Divider()
 
-                FileTreeListView(root: displayRoot, selectedPath: $selectedPath) { node in
+                FileTreeOutlineView(root: displayRoot, selectedPath: $selectedPath) { node in
                     coordinator.zoomNode = node
                 }
             }
