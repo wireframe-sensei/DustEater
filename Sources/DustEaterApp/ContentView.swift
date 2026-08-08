@@ -22,7 +22,7 @@ struct ContentView: View {
 
         // Queue async sort if not already done, but don't block on it
         if sortedRoot == nil && !isSortingInProgress {
-            print("📊 Starting background sort... (zoomNode: \(coordinator.zoomNode?.name ?? "nil"), selectedPath: \(selectedPath ?? "nil"))")
+            print("📊 Starting background sort...")
             isSortingInProgress = true
             let sortStart = DispatchTime.now()
             Task.detached(priority: .userInitiated) {

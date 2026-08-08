@@ -22,8 +22,6 @@ struct FileTreeListView: View {
         .onChange(of: selectedPath) { oldPath, newPath in
             // When selection changes, expand all parent folders
             if let newPath {
-                print("🔍 FileTreeListView selection changed to: \(newPath)")
-
                 // Add all parent paths to expandedPaths
                 let pathComponents = newPath.split(separator: "/", omittingEmptySubsequences: true)
                 var currentPath = ""
@@ -35,10 +33,7 @@ struct FileTreeListView: View {
 
                 // Find and notify the node
                 if let node = root.find(path: newPath) {
-                    print("🔍 Found node, calling onSelectNode")
                     onSelectNode(node)
-                } else {
-                    print("🔍 Node not found for path: \(newPath)")
                 }
             }
         }
@@ -95,6 +90,7 @@ struct TreeNodeView: View {
                 FileRowView(node: node, parentSize: rootSize)
                     .tag(node.path)
             }
+            .id(expandedPaths) // Force re-render when expandedPaths changes
         } else {
             // Leaf node or file
             FileRowView(node: node, parentSize: rootSize)
