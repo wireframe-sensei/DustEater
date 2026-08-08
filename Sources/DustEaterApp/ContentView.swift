@@ -172,6 +172,7 @@ struct IdleStateView: View {
 struct ScanningStateView: View {
     let progress: ScanProgressSnapshot
     let onCancel: () -> Void
+    @State private var rotation: Double = 0
 
     var body: some View {
         ZStack {
@@ -194,9 +195,9 @@ struct ScanningStateView: View {
                         .stroke(Color.white.opacity(0.1), lineWidth: 12)
                         .frame(width: 280, height: 280)
 
-                    // Doughnut progress ring (animated)
+                    // Doughnut progress ring (animated rotating)
                     Circle()
-                        .trim(from: 0, to: 0.5) // Progress placeholder, would be dynamic in real app
+                        .trim(from: 0, to: 0.3)
                         .stroke(
                             LinearGradient(
                                 gradient: Gradient(colors: [.blue, .blue.opacity(0.6)]),
@@ -206,7 +207,12 @@ struct ScanningStateView: View {
                             style: StrokeStyle(lineWidth: 12, lineCap: .round)
                         )
                         .frame(width: 280, height: 280)
-                        .rotationEffect(.degrees(-90))
+                        .rotationEffect(.degrees(rotation))
+                        .onAppear {
+                            withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                                rotation = 360
+                            }
+                        }
 
                     // Center content
                     VStack(spacing: DustEaterTheme.Spacing.md) {
