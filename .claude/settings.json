@@ -97,7 +97,8 @@
       "Bash(git commit -m 'Filter out system directories to eliminate hard link over-counting *)",
       "Bash(git commit -m 'Properly deduplicate hard-linked files using inode tracking *)",
       "Bash(git commit -m 'Redesign home screen with card layout *)",
-      "Bash(git commit -m 'Redesign home screen with Apple-inspired design language *)"
+      "Bash(git commit -m 'Redesign home screen with Apple-inspired design language *)",
+      "Bash(git commit -m 'Add custom hover tooltip for treemap squares *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

@@ -8,6 +8,7 @@ struct TreemapView: View {
     let onSelectNode: (FileNode) -> Void
     let theme: ColorTheme
     @State private var hoveredId: String?
+    @State private var mouseLocation: CGPoint = .zero
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -27,6 +28,7 @@ struct TreemapView: View {
             }
             .onContinuousHover { phase in
                 if case .active(let location) = phase {
+                    mouseLocation = location
                     hoveredId = rects.first { $0.contains(point: location) }?.id
                     if hoveredId != nil {
                         NSCursor.pointingHand.set()
@@ -65,27 +67,45 @@ struct TreemapView: View {
 
             // Tooltip for hovered item
             if let hoveredId, let hovered = rects.first(where: { $0.id == hoveredId }) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(hovered.node.name)
-                        .font(.system(.headline, design: .default))
+                        .font(.system(size: 15, weight: .semibold, design: .default))
                         .lineLimit(1)
-                    HStack(spacing: 8) {
-                        Text(ByteFormatter.string(fromBytes: hovered.node.size))
-                            .font(.system(.body, design: .monospaced))
+
+                    Divider()
+                        .frame(height: 1)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Label {
+                                Text(ByteFormatter.string(fromBytes: hovered.node.size))
+                                    .font(.system(.body, design: .monospaced))
+                            } icon: {
+                                Image(systemName: hovered.node.isDirectory ? "folder.fill" : "doc.fill")
+                                    .font(.system(size: 11))
+                            }
                             .foregroundStyle(.secondary)
+                        }
+
                         if hovered.node.isDirectory {
-                            Text("•")
+                            HStack(spacing: 8) {
+                                Label {
+                                    Text("\(hovered.node.itemCount) items")
+                                        .font(.system(.caption, design: .default))
+                                } icon: {
+                                    Image(systemName: "square.grid.2x2")
+                                        .font(.system(size: 10))
+                                }
                                 .foregroundStyle(.secondary)
-                            Text("\(hovered.node.itemCount) items")
-                                .font(.system(.caption, design: .default))
-                                .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
                 .padding(12)
-                .background(.ultraThinMaterial)
-                .cornerRadius(8)
-                .padding()
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(10)
+                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+                .position(x: min(mouseLocation.x + 16, 400), y: mouseLocation.y - 20)
             }
         }
     }
