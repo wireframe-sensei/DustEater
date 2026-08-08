@@ -105,7 +105,8 @@
       "Bash(git commit -m 'Improve tooltip offset and add smooth bezier animation *)",
       "Bash(git commit -m 'Add doughnut progress ring to scanning state view *)",
       "Bash(git commit -m 'Animate doughnut progress ring continuously *)",
-      "Bash(git commit -m 'Update progress ring to show real scan progress 0-100% *)"
+      "Bash(git commit -m 'Update progress ring to show real scan progress 0-100% *)",
+      "Bash(git commit -m 'Update progress ring to use actual disk size for 0-100% progress *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var isSortingInProgress = false
     @State private var selectedTheme: ColorTheme = .weighted
     @State private var isOnHome = true
+    @State private var totalDiskSize: Int64 = 0
 
     private var selectedNode: FileNode? {
         guard let selectedPath, case .finished(let root) = coordinator.state else { return nil }
@@ -75,7 +76,7 @@ struct ContentView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .scanning(let progress):
-                    ScanningStateView(progress: progress, onCancel: coordinator.cancelScan)
+                    ScanningStateView(progress: progress, totalDiskSize: totalDiskSize, onCancel: coordinator.cancelScan)
                 case .finished(let root):
                     MainContentView(
                         root: root,
@@ -108,6 +109,14 @@ struct ContentView: View {
         coordinator.zoomNode = nil
         sortedRoot = nil
         isSortingInProgress = false
+
+        // Get total disk size
+        let url = URL(fileURLWithPath: path)
+        if let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]),
+           let totalCapacity = values.volumeTotalCapacity {
+            totalDiskSize = Int64(totalCapacity)
+        }
+
         coordinator.startScan(path: path)
     }
 
@@ -123,6 +132,13 @@ struct ContentView: View {
         coordinator.zoomNode = nil
         sortedRoot = nil
         isSortingInProgress = false
+
+        // Get total disk size
+        if let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]),
+           let totalCapacity = values.volumeTotalCapacity {
+            totalDiskSize = Int64(totalCapacity)
+        }
+
         coordinator.startScan(path: url.path)
     }
 }
@@ -171,14 +187,14 @@ struct IdleStateView: View {
 // MARK: - Scanning State
 struct ScanningStateView: View {
     let progress: ScanProgressSnapshot
+    let totalDiskSize: Int64
     let onCancel: () -> Void
 
     var progressRatio: Double {
-        // Use logarithmic scale for items scanned to show smooth progress
-        // Maps ~1 item to ~0.01 progress, increasing logarithmically
-        let itemsDouble = Double(progress.itemsScanned)
-        let logProgress = log10(itemsDouble + 1) / 6.0  // 6 is log10(1,000,000)
-        return min(0.99, max(0.01, logProgress))  // Never reach 100% until scan completes
+        // Calculate progress based on bytes scanned vs total disk size
+        guard totalDiskSize > 0 else { return 0.01 }
+        let ratio = Double(progress.bytesScanned) / Double(totalDiskSize)
+        return min(0.99, max(0.01, ratio))  // Cap at 99% until scan completes
     }
 
     var body: some View {
