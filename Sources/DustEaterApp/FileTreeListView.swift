@@ -5,29 +5,105 @@ struct FileTreeListView: View {
     let root: FileNode
     @Binding var selectedPath: String?
     let onSelectNode: (FileNode) -> Void
+    @State private var expandedPaths: Set<String> = []
 
     var body: some View {
         List(selection: $selectedPath) {
-            OutlineGroup(root.children, id: \.path, children: \.outlineChildren) { node in
-                FileRowView(node: node, parentSize: root.size)
-                    .tag(node.path)
-            }
+            TreeNodeView(
+                node: root,
+                isRoot: true,
+                selectedPath: $selectedPath,
+                expandedPaths: $expandedPaths,
+                onSelectNode: onSelectNode,
+                rootSize: root.size
+            )
         }
         .listStyle(.sidebar)
         .onChange(of: selectedPath) { oldPath, newPath in
-            // When selection changes, find the node and notify
-            if let newPath, let node = root.find(path: newPath) {
-                onSelectNode(node)
+            // When selection changes, expand all parent folders
+            if let newPath {
+                print("🔍 FileTreeListView selection changed to: \(newPath)")
+
+                // Add all parent paths to expandedPaths
+                let pathComponents = newPath.split(separator: "/", omittingEmptySubsequences: true)
+                var currentPath = ""
+                for component in pathComponents.dropLast() {
+                    currentPath.append("/")
+                    currentPath.append(contentsOf: component)
+                    expandedPaths.insert(currentPath)
+                }
+
+                // Find and notify the node
+                if let node = root.find(path: newPath) {
+                    print("🔍 Found node, calling onSelectNode")
+                    onSelectNode(node)
+                } else {
+                    print("🔍 Node not found for path: \(newPath)")
+                }
             }
         }
     }
 }
 
-private extension FileNode {
-    var outlineChildren: [FileNode]? {
-        children.isEmpty ? nil : children
-    }
+// Recursive tree node view with expansion control
+struct TreeNodeView: View {
+    let node: FileNode
+    let isRoot: Bool
+    @Binding var selectedPath: String?
+    @Binding var expandedPaths: Set<String>
+    let onSelectNode: (FileNode) -> Void
+    let rootSize: Int64
 
+    var body: some View {
+        if isRoot {
+            // Root node: show children directly
+            ForEach(node.children, id: \.path) { child in
+                TreeNodeView(
+                    node: child,
+                    isRoot: false,
+                    selectedPath: $selectedPath,
+                    expandedPaths: $expandedPaths,
+                    onSelectNode: onSelectNode,
+                    rootSize: rootSize
+                )
+            }
+        } else if node.isDirectory && !node.children.isEmpty {
+            // Directory with children: use DisclosureGroup
+            let isExpanded = Binding(
+                get: { expandedPaths.contains(node.path) },
+                set: { newValue in
+                    if newValue {
+                        expandedPaths.insert(node.path)
+                    } else {
+                        expandedPaths.remove(node.path)
+                    }
+                }
+            )
+
+            DisclosureGroup(isExpanded: isExpanded) {
+                ForEach(node.children, id: \.path) { child in
+                    TreeNodeView(
+                        node: child,
+                        isRoot: false,
+                        selectedPath: $selectedPath,
+                        expandedPaths: $expandedPaths,
+                        onSelectNode: onSelectNode,
+                        rootSize: rootSize
+                    )
+                }
+            } label: {
+                FileRowView(node: node, parentSize: rootSize)
+                    .tag(node.path)
+            }
+        } else {
+            // Leaf node or file
+            FileRowView(node: node, parentSize: rootSize)
+                .tag(node.path)
+        }
+    }
+}
+
+private extension FileNode {
     func find(path: String) -> FileNode? {
         if self.path == path { return self }
         for child in children {
