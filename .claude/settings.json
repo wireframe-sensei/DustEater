@@ -100,7 +100,8 @@
       "Bash(git commit -m 'Redesign home screen with Apple-inspired design language *)",
       "Bash(git commit -m 'Add custom hover tooltip for treemap squares *)",
       "Bash(git commit -m 'Fix tooltip width and flickering issues *)",
-      "Bash(git commit -m 'Add info note about disk usage differences on home page *)"
+      "Bash(git commit -m 'Add info note about disk usage differences on home page *)",
+      "Bash(git commit -m 'Redesign app with macOS Sequoia glass morphism aesthetic *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"
