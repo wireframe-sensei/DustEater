@@ -67,7 +67,14 @@
       "Read(//private/tmp/wiztree-metafile/assets/**)",
       "Read(//tmp/wiztree-metafile/src/output/**)",
       "Read(//private/tmp/wiztree-metafile/src/output/**)",
-      "Bash(git commit -m 'Add text labels to treemap rectangles for better readability *)"
+      "Bash(git commit -m 'Add text labels to treemap rectangles for better readability *)",
+      "Read(//private/tmp/YMTreeMap/**)",
+      "Read(//tmp/YMTreeMap/**)",
+      "Bash(cp /tmp/YMTreeMap/YMTreeMap.swift /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/Sources/DustEaterCore/Treemap/YMTreeMap.swift)",
+      "Bash(git commit -m 'Replace custom treemap layout with Yahoo'\\\\''s YMTreeMap library *)"
+    ],
+    "additionalDirectories": [
+      "/private/tmp/YMTreeMap"
     ]
   }
 }

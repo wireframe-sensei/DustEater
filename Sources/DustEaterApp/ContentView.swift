@@ -36,7 +36,20 @@ struct ContentView: View {
 
         let baseNode = sortedRoot ?? root
         let displayNode = coordinator.zoomNode ?? baseNode
-        return TreemapLayout.compute(node: displayNode, size: size)
+
+        // Use YMTreeMap for treemap layout
+        let children = displayNode.children
+        guard !children.isEmpty else { return [] }
+
+        let sizes = children.map { Double($0.size) }
+        let treeMap = YMTreeMap(withValues: sizes)
+        let bounds = CGRect(x: 0, y: 0, width: size.width, height: size.height)
+        let cgRects = treeMap.tessellate(inRect: bounds)
+
+        // Map YMTreeMap results back to TreemapRects with FileNodes
+        return zip(children, cgRects).map { child, cgRect in
+            TreemapRect(node: child, frame: cgRect)
+        }
     }
 
     var body: some View {
