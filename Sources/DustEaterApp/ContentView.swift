@@ -333,13 +333,7 @@ struct MainContentView: View {
                             }
                             .keyboardShortcut(.escape)
                             .help("Back to overview")
-                            .onHover { isHovered in
-                                if isHovered {
-                                    NSCursor.pointingHand.set()
-                                } else {
-                                    NSCursor.arrow.set()
-                                }
-                            }
+                            .pointingHandCursor()
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
@@ -387,13 +381,7 @@ struct MainContentView: View {
                             }
                         }
                         .help("Change color theme")
-                        .onHover { isHovered in
-                            if isHovered {
-                                NSCursor.pointingHand.set()
-                            } else {
-                                NSCursor.arrow.set()
-                            }
-                        }
+                        .pointingHandCursor()
 
                         Button {
                             onBackToHome()
@@ -405,13 +393,7 @@ struct MainContentView: View {
                             }
                         }
                         .help("Back to home screen")
-                        .onHover { isHovered in
-                            if isHovered {
-                                NSCursor.pointingHand.set()
-                            } else {
-                                NSCursor.arrow.set()
-                            }
-                        }
+                        .pointingHandCursor()
                     }
                 }
                 .padding(DustEaterTheme.Spacing.md)
