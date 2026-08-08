@@ -64,6 +64,8 @@ class FileTreeCell: NSTableCellView {
         }
     }
 
+    private var trackingArea: NSTrackingArea?
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setupCell()
@@ -72,6 +74,44 @@ class FileTreeCell: NSTableCellView {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupCell()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea = trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseEnteredAndExited]
+        trackingArea = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+        if let trackingArea = trackingArea {
+            addTrackingArea(trackingArea)
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        updateTooltip()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        toolTip = nil
+    }
+
+    private func updateTooltip() {
+        guard let node = node else { return }
+
+        // Check if text is truncated by comparing display width
+        if let textField = textField {
+            let textWidth = textField.intrinsicContentSize.width
+            let availableWidth = textField.bounds.width
+
+            if textWidth > availableWidth {
+                toolTip = node.name
+            } else {
+                toolTip = nil
+            }
+        }
     }
 
     private func setupCell() {
