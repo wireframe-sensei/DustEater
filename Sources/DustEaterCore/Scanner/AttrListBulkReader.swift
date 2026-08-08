@@ -8,6 +8,8 @@ struct RawDirEntry {
     let isSymlink: Bool
     /// On-disk allocated size in bytes, as reported by the filesystem.
     let allocSize: Int64
+    /// Inode number used to deduplicate hard-linked files
+    let inode: UInt64
 }
 
 enum AttrListError: Error, CustomStringConvertible {
@@ -56,15 +58,17 @@ enum AttrListBulkReader {
         }
         defer { close(fd) }
 
-        // Request: common attrs (name, object type) + file attrs (allocated size).
+        // Request: common attrs (name, object type, inode) + file attrs (allocated size).
         // ATTR_CMN_RETURNED_ATTRS MUST be requested so we can tell which
         // attributes the kernel actually filled in for each entry.
+        // Inode is used to detect and deduplicate hard-linked files.
         var attrList = attrlist()
         attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         attrList.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
             | attrgroup_t(ATTR_CMN_NAME)
             | attrgroup_t(ATTR_CMN_OBJTYPE)
             | attrgroup_t(ATTR_CMN_ERROR)
+            | attrgroup_t(ATTR_CMN_FILEID)
         attrList.fileattr = attrgroup_t(ATTR_FILE_ALLOCSIZE)
 
         let bufferSize = 1 << 16 // 64 KiB, large enough to batch hundreds of entries
@@ -100,6 +104,7 @@ enum AttrListBulkReader {
                     var objType: UInt32 = 0
                     var hadError = false
                     var allocSize: Int64 = 0
+                    var inode: UInt64 = 0
 
                     // Remaining common attrs are packed in ascending bit order.
                     if returned.commonattr & attrgroup_t(ATTR_CMN_NAME) != 0 {
@@ -119,6 +124,10 @@ enum AttrListBulkReader {
                         hadError = err != 0
                         fieldPtr += MemoryLayout<UInt32>.size
                     }
+                    if returned.commonattr & attrgroup_t(ATTR_CMN_FILEID) != 0 {
+                        inode = fieldPtr.loadUnaligned(as: UInt64.self)
+                        fieldPtr += MemoryLayout<UInt64>.size
+                    }
                     if returned.fileattr & attrgroup_t(ATTR_FILE_ALLOCSIZE) != 0 {
                         allocSize = fieldPtr.loadUnaligned(as: Int64.self)
                         fieldPtr += MemoryLayout<Int64>.size
@@ -132,7 +141,8 @@ enum AttrListBulkReader {
                                 name: name,
                                 isDirectory: isDir,
                                 isSymlink: isLink,
-                                allocSize: isDir ? 0 : allocSize
+                                allocSize: isDir ? 0 : allocSize,
+                                inode: inode
                             )
                         )
                     }

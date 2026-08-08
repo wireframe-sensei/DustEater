@@ -30,6 +30,7 @@ public struct ScanProgress: Sendable {
 public actor DiskScanner {
     private var itemsScanned = 0
     private var bytesScanned: Int64 = 0
+    private var seenInodes: Set<UInt64> = []
 
     public init() {}
 
@@ -41,7 +42,8 @@ public actor DiskScanner {
         onProgress: (@Sendable (ScanProgress) -> Void)? = nil
     ) async -> FileNode {
         let name = (rootPath as NSString).lastPathComponent
-        return await Self.scanDirectory(
+        seenInodes.removeAll()
+        return await scanDirectory(
             path: rootPath,
             name: name,
             onEntries: { [weak self] items, bytes, path in
@@ -61,30 +63,11 @@ public actor DiskScanner {
         handler?(ScanProgress(itemsScanned: itemsScanned, bytesScanned: bytesScanned, currentPath: path))
     }
 
-    /// Directories to skip - mostly system dirs with heavy hard-linking that
-    /// distort user-visible disk usage breakdown
-    private static let skipDirs = Set([
-        "System", "Library", "opt", "private", "usr", "bin", "sbin", "var",
-        "etc", "tmp", "dev", "proc", "Volumes", "cores"
-    ])
-
-    /// Check if a directory should be skipped due to hard links or being system-owned
-    private static func shouldSkipDirectory(_ name: String, at path: String) -> Bool {
-        // Skip if it's a known system directory at root level
-        if path == "/" && skipDirs.contains(name) {
-            return true
-        }
-        // Skip hidden directories (starting with .)
-        if name.hasPrefix(".") {
-            return true
-        }
-        return false
-    }
-
     /// Recursively scans one directory. Files are summed directly; each
     /// subdirectory is scanned in its own child task, and results are
-    /// folded together as they complete.
-    private static func scanDirectory(
+    /// folded together as they complete. Uses inode tracking to deduplicate
+    /// hard-linked files so they're only counted once.
+    private func scanDirectory(
         path: String,
         name: String,
         onEntries: @escaping @Sendable (Int, Int64, String) async -> Void
@@ -106,14 +89,16 @@ public actor DiskScanner {
 
         for entry in entries where !entry.isSymlink {
             if entry.isDirectory {
-                // Skip system directories that cause hard link duplication
-                // and aren't relevant to user's disk usage analysis
-                if shouldSkipDirectory(entry.name, at: path) {
-                    continue
-                }
                 subdirEntries.append(entry)
             } else {
-                fileTotal += entry.allocSize
+                // Only count each inode once (deduplicate hard links)
+                let shouldCount = !seenInodes.contains(entry.inode)
+                if shouldCount {
+                    seenInodes.insert(entry.inode)
+                }
+
+                let countedSize = shouldCount ? entry.allocSize : 0
+                fileTotal += countedSize
                 var childPath = path
                 childPath.append("/")
                 childPath.append(entry.name)
@@ -121,7 +106,7 @@ public actor DiskScanner {
                     FileNode(
                         name: entry.name,
                         path: childPath,
-                        size: entry.allocSize,
+                        size: countedSize,
                         isDirectory: false
                     )
                 )
@@ -150,7 +135,7 @@ public actor DiskScanner {
                 childPath.append("/")
                 childPath.append(entry.name)
                 group.addTask {
-                    await scanDirectory(path: childPath, name: entry.name, onEntries: onEntries)
+                    await self.scanDirectory(path: childPath, name: entry.name, onEntries: onEntries)
                 }
             }
             for await child in group {

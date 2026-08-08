@@ -94,7 +94,8 @@
       "Bash(grep \"NLINK\\\\|LINKCOUNT\" /usr/include/sys/attr.h 2>/dev/null)",
       "Bash(swiftc -c -Xcc -E /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/Sources/DustEaterCore/Scanner/AttrListBulkReader.swift)",
       "Bash(git commit -m 'Update hard link explanation in sidebar *)",
-      "Bash(git commit -m 'Filter out system directories to eliminate hard link over-counting *)"
+      "Bash(git commit -m 'Filter out system directories to eliminate hard link over-counting *)",
+      "Bash(git commit -m 'Properly deduplicate hard-linked files using inode tracking *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"
