@@ -95,7 +95,8 @@
       "Bash(swiftc -c -Xcc -E /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/Sources/DustEaterCore/Scanner/AttrListBulkReader.swift)",
       "Bash(git commit -m 'Update hard link explanation in sidebar *)",
       "Bash(git commit -m 'Filter out system directories to eliminate hard link over-counting *)",
-      "Bash(git commit -m 'Properly deduplicate hard-linked files using inode tracking *)"
+      "Bash(git commit -m 'Properly deduplicate hard-linked files using inode tracking *)",
+      "Bash(git commit -m 'Redesign home screen with card layout *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"
