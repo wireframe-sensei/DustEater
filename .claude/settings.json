@@ -71,7 +71,8 @@
       "Read(//private/tmp/YMTreeMap/**)",
       "Read(//tmp/YMTreeMap/**)",
       "Bash(cp /tmp/YMTreeMap/YMTreeMap.swift /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/Sources/DustEaterCore/Treemap/YMTreeMap.swift)",
-      "Bash(git commit -m 'Replace custom treemap layout with Yahoo'\\\\''s YMTreeMap library *)"
+      "Bash(git commit -m 'Replace custom treemap layout with Yahoo'\\\\''s YMTreeMap library *)",
+      "Bash(git commit -m 'Fix treemap Canvas not filling available space *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

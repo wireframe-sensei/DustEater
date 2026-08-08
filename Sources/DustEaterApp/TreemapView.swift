@@ -17,6 +17,7 @@ struct TreemapView: View {
             }
             .background(Color(nsColor: .controlBackgroundColor))
             .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onTapGesture { location in
                 if let tapped = rects.first(where: { $0.contains(point: location) }) {
                     onSelectNode(tapped.node)
