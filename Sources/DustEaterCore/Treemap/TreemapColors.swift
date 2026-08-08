@@ -4,10 +4,20 @@ import SwiftUI
 /// Colors are chosen to be distinct enough for visual scanning while
 /// remaining pleasant and accessible.
 public enum TreemapColors {
-    /// Color for a directory node.
-    public static func colorForDirectory(depth: Int, theme: ColorTheme) -> Color {
+    /// Color for a directory node with variation for siblings at same depth.
+    public static func colorForDirectory(depth: Int, name: String = "", theme: ColorTheme) -> Color {
         let colors = theme.directoryColors()
-        return colors[depth % colors.count]
+        let baseIndex = depth % colors.count
+
+        // For depth 0, cycle through all colors; for others, use depth + name variation
+        if depth == 0 {
+            return colors[baseIndex]
+        }
+
+        // Add variation for siblings by using both depth and name hash
+        let hash = abs(name.hashValue) % 2
+        let colorIndex = (baseIndex + hash) % colors.count
+        return colors[colorIndex]
     }
 
     /// Color for a file node, based on its extension or type.

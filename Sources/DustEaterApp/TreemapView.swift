@@ -85,7 +85,12 @@ struct TreemapView: View {
 
     private func drawRect(_ rect: TreemapRect, isHovered: Bool, in context: inout GraphicsContext) {
         let depth = TreemapColors.depth(fromPath: rect.node.path, relativeTo: rootPath)
-        let baseColor = TreemapColors.colorForNode(rect.node, depth: depth, theme: theme)
+        let baseColor: Color
+        if rect.node.isDirectory {
+            baseColor = TreemapColors.colorForDirectory(depth: depth, name: rect.node.name, theme: theme)
+        } else {
+            baseColor = TreemapColors.colorForFile(name: rect.node.name, depth: depth, theme: theme)
+        }
 
         // Apple-inspired subtle colors with depth
         let fillColor: Color
