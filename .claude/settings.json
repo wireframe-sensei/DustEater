@@ -112,7 +112,8 @@
       "Bash(xcodebuild -scheme DustEaterApp -configuration Debug -derivedDataPath .build)",
       "Bash(xcodebuild -scheme DustEaterApp -configuration Debug -destination 'generic/platform=macOS' -derivedDataPath .build)",
       "Bash(open /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/.build/Build/Products/Debug/DustEaterApp)",
-      "Bash(pkill -f DustEaterApp)"
+      "Bash(pkill -f DustEaterApp)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

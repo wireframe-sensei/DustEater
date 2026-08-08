@@ -155,7 +155,14 @@ struct DiskHomeView: View {
         for url in urls {
             let path = url.path
 
-            if path.contains("/System/Volumes/") || path.contains("/.") {
+            // Filter out system volumes, simulator disks, and development volumes
+            if path.contains("/System/Volumes/") ||
+               path.contains("/.") ||
+               path.contains("/Library/Developer/CoreSimulator/") ||
+               path.contains("SimRuntimeBundle") ||
+               path.contains("iOS_") ||
+               path.contains("watchOS_") ||
+               path.contains("tvOS_") {
                 continue
             }
 
