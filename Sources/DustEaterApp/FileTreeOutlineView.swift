@@ -75,18 +75,16 @@ class FileTreeCell: NSTableCellView {
     }
 
     private func setupCell() {
-        // Simple layout: NSOutlineView handles icon automatically
-        // We just need to set textField and sizeField
-
+        // Use NSTableCellView's built-in textField
         let textField = NSTextField()
         textField.isBezeled = false
         textField.drawsBackground = false
         textField.isEditable = false
         textField.font = .systemFont(ofSize: 13)
         textField.lineBreakMode = .byTruncatingTail
-        addSubview(textField)
         self.textField = textField
 
+        // Add size field on the right
         let sizeField = NSTextField()
         sizeField.isBezeled = false
         sizeField.drawsBackground = false
@@ -96,6 +94,23 @@ class FileTreeCell: NSTableCellView {
         sizeField.alignment = .right
         addSubview(sizeField)
         self.sizeField = sizeField
+    }
+
+    override func layout() {
+        super.layout()
+
+        // Position size field on the right
+        if let sizeField = sizeField {
+            let width = bounds.width
+            let height = bounds.height
+            sizeField.frame = NSRect(x: width - 80, y: 0, width: 76, height: height)
+        }
+
+        // Position text field to the right of icon
+        if let textField = textField {
+            let height = bounds.height
+            textField.frame = NSRect(x: 24, y: 0, width: bounds.width - 110, height: height)
+        }
     }
 
     private weak var sizeField: NSTextField?
