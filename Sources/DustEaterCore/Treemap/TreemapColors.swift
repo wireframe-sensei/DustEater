@@ -40,11 +40,31 @@ public enum TreemapColors {
 
     /// Determines color based on whether the node is a directory or file.
     public static func colorForNode(_ node: FileNode, depth: Int, theme: ColorTheme) -> Color {
+        // Weighted theme uses size-based hue (green→red)
+        if theme == .weighted {
+            return colorBySize(node.size)
+        }
+
         if node.isDirectory {
             return colorForDirectory(depth: depth, theme: theme)
         } else {
             return colorForFile(name: node.name, depth: depth, theme: theme)
         }
+    }
+
+    /// Map size to a hue from green (small) to red (large) using logarithmic scale
+    private static func colorBySize(_ size: Int64) -> Color {
+        // Use logarithmic scale: map log2(bytes) to hue
+        // 1KB = log2(1024) ≈ 10 → green (120°)
+        // 1GB = log2(1e9) ≈ 30 → red (0°)
+        let logSize = log2(Double(max(1, size)))
+
+        // Map log value (10-30) to hue (120 to 0 degrees = green to red)
+        // Normalize to 0-1 range for hue
+        let normalizedLog = (logSize - 10.0) / 20.0  // 0 at 10, 1 at 30
+        let hue = max(0, 120.0 - (normalizedLog * 120.0)) / 360.0  // 120° (green) to 0° (red)
+
+        return Color(hue: hue, saturation: 0.7, brightness: 0.9)
     }
 
     /// Helper to compute depth from a path string (slash count).

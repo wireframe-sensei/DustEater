@@ -8,6 +8,7 @@ public enum ColorTheme: String, CaseIterable {
     case warm = "Warm"
     case cool = "Cool"
     case rainbow = "Rainbow"
+    case weighted = "Weighted"
 
     public var displayName: String {
         self.rawValue
@@ -64,6 +65,9 @@ public enum ColorTheme: String, CaseIterable {
                 Color(red: 0.0, green: 0.8, blue: 0.0),   // Green
                 Color(red: 0.0, green: 0.0, blue: 1.0),   // Blue
             ]
+        case .weighted:
+            // Weighted theme uses size-based hue, not fixed palette
+            return []
         }
     }
 
@@ -130,6 +134,9 @@ public enum ColorTheme: String, CaseIterable {
                 "document": Color(red: 0.5, green: 0.5, blue: 0.5), // Gray
                 "other": Color(red: 0.4, green: 0.4, blue: 0.4),    // Dark Gray
             ]
+        case .weighted:
+            // Weighted theme uses size-based hue, not fixed palette
+            return [:]
         }
     }
 }

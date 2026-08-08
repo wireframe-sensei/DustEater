@@ -76,7 +76,8 @@
       "Bash(git commit -m 'Add theme system with 6 color schemes for treemap *)",
       "Bash(git commit -m 'Redesign color themes with truly distinct palettes *)",
       "Bash(git commit -m 'Add theme name indicator to header for debugging *)",
-      "Bash(git commit -m 'Fix: Add color variation for sibling directories at same depth *)"
+      "Bash(git commit -m 'Fix: Add color variation for sibling directories at same depth *)",
+      "Bash(git commit -m 'Add Weighted theme: hue shifts from green \\(small\\) to red \\(large\\) *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"
