@@ -6,10 +6,10 @@ struct ContentView: View {
     @State private var coordinator = ScanCoordinator()
     @State private var selectedPath: String?
     @State private var showSidebar = true
-    @State private var hasStartedScan = false
     @State private var sortedRoot: FileNode?
     @State private var isSortingInProgress = false
     @State private var selectedTheme: ColorTheme = .weighted
+    @State private var isOnHome = true
 
     private var selectedNode: FileNode? {
         guard let selectedPath, case .finished(let root) = coordinator.state else { return nil }
@@ -55,54 +55,60 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Main content
-            switch coordinator.state {
-            case .idle:
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .scaleEffect(1.2)
-                    Text("Scanning your home directory...")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear {
-                    if !hasStartedScan {
-                        hasStartedScan = true
-                        sortedRoot = nil
-                        isSortingInProgress = false
-                        coordinator.startScan(path: NSHomeDirectory())
+            if isOnHome {
+                DiskHomeView(
+                    onSelectDisk: { path in
+                        startScan(path: path)
+                    },
+                    onSelectCustomFolder: {
+                        chooseFolder()
                     }
-                }
-            case .scanning(let progress):
-                ScanningStateView(progress: progress, onCancel: coordinator.cancelScan)
-            case .finished(let root):
-                MainContentView(
-                    root: root,
-                    sortedRoot: sortedRoot,
-                    selectedPath: $selectedPath,
-                    coordinator: coordinator,
-                    treemapRects: treemapRects(for:),
-                    showSidebar: $showSidebar,
-                    selectedTheme: $selectedTheme
                 )
-            case .needsFullDiskAccess(let path):
-                PermissionBannerView(path: path)
-            case .failed(let message):
-                ErrorStateView(message: message)
+            } else {
+                switch coordinator.state {
+                case .idle:
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        Text("Preparing scan...")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .scanning(let progress):
+                    ScanningStateView(progress: progress, onCancel: coordinator.cancelScan)
+                case .finished(let root):
+                    MainContentView(
+                        root: root,
+                        sortedRoot: sortedRoot,
+                        selectedPath: $selectedPath,
+                        coordinator: coordinator,
+                        treemapRects: treemapRects(for:),
+                        showSidebar: $showSidebar,
+                        selectedTheme: $selectedTheme,
+                        onBackToHome: {
+                            isOnHome = true
+                            sortedRoot = nil
+                            isSortingInProgress = false
+                            selectedPath = nil
+                        }
+                    )
+                case .needsFullDiskAccess(let path):
+                    PermissionBannerView(path: path)
+                case .failed(let message):
+                    ErrorStateView(message: message)
+                }
             }
         }
         .frame(minWidth: 900, minHeight: 600)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    chooseFolder()
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .keyboardShortcut("o", modifiers: [.command])
-                .help("Choose folder to scan")
-            }
-        }
+    }
+
+    private func startScan(path: String) {
+        isOnHome = false
+        selectedPath = nil
+        coordinator.zoomNode = nil
+        sortedRoot = nil
+        isSortingInProgress = false
+        coordinator.startScan(path: path)
     }
 
     private func chooseFolder() {
@@ -269,6 +275,7 @@ struct MainContentView: View {
     let treemapRects: (CGSize) -> [TreemapRect]
     @Binding var showSidebar: Bool
     @Binding var selectedTheme: ColorTheme
+    let onBackToHome: () -> Void
 
     private var displayRoot: FileNode {
         sortedRoot ?? root
@@ -367,6 +374,17 @@ struct MainContentView: View {
                             }
                         }
                         .help("Change color theme")
+
+                        Button {
+                            onBackToHome()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "house")
+                                Text("Home")
+                                    .font(.caption)
+                            }
+                        }
+                        .help("Back to home screen")
                     }
                 }
                 .padding(DustEaterTheme.Spacing.md)
