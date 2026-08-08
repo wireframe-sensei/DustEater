@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var hasStartedScan = false
     @State private var sortedRoot: FileNode?
     @State private var isSortingInProgress = false
+    @State private var selectedTheme: ColorTheme = .vibrant
 
     private var selectedNode: FileNode? {
         guard let selectedPath, case .finished(let root) = coordinator.state else { return nil }
@@ -81,7 +82,8 @@ struct ContentView: View {
                     selectedPath: $selectedPath,
                     coordinator: coordinator,
                     treemapRects: treemapRects(for:),
-                    showSidebar: $showSidebar
+                    showSidebar: $showSidebar,
+                    selectedTheme: $selectedTheme
                 )
             case .needsFullDiskAccess(let path):
                 PermissionBannerView(path: path)
@@ -266,6 +268,7 @@ struct MainContentView: View {
     let coordinator: ScanCoordinator
     let treemapRects: (CGSize) -> [TreemapRect]
     @Binding var showSidebar: Bool
+    @Binding var selectedTheme: ColorTheme
 
     private var displayRoot: FileNode {
         sortedRoot ?? root
@@ -332,15 +335,35 @@ struct MainContentView: View {
 
                         Spacer()
 
-                        if coordinator.zoomNode != nil {
-                            Button {
-                                coordinator.zoomNode = nil
-                                selectedPath = root.path
+                        HStack(spacing: DustEaterTheme.Spacing.md) {
+                            Menu {
+                                ForEach(ColorTheme.allCases, id: \.self) { theme in
+                                    Button {
+                                        selectedTheme = theme
+                                    } label: {
+                                        HStack {
+                                            Text(theme.displayName)
+                                            if theme == selectedTheme {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
                             } label: {
-                                Image(systemName: "chevron.left")
+                                Image(systemName: "paintpalette")
                             }
-                            .keyboardShortcut(.escape)
-                            .help("Back to overview")
+                            .help("Change color theme")
+
+                            if coordinator.zoomNode != nil {
+                                Button {
+                                    coordinator.zoomNode = nil
+                                    selectedPath = root.path
+                                } label: {
+                                    Image(systemName: "chevron.left")
+                                }
+                                .keyboardShortcut(.escape)
+                                .help("Back to overview")
+                            }
                         }
                     }
                 }
@@ -359,7 +382,8 @@ struct MainContentView: View {
                                 coordinator.zoomNode = node
                                 selectedPath = node.path
                             }
-                        }
+                        },
+                        theme: selectedTheme
                     )
                 }
             }

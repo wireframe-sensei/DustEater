@@ -5,6 +5,7 @@ struct TreemapView: View {
     let rects: [TreemapRect]
     let rootPath: String
     let onSelectNode: (FileNode) -> Void
+    let theme: ColorTheme
     @State private var hoveredId: String?
 
     var body: some View {
@@ -84,7 +85,7 @@ struct TreemapView: View {
 
     private func drawRect(_ rect: TreemapRect, isHovered: Bool, in context: inout GraphicsContext) {
         let depth = TreemapColors.depth(fromPath: rect.node.path, relativeTo: rootPath)
-        let baseColor = TreemapColors.colorForNode(rect.node, depth: depth)
+        let baseColor = TreemapColors.colorForNode(rect.node, depth: depth, theme: theme)
 
         // Apple-inspired subtle colors with depth
         let fillColor: Color
