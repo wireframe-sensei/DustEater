@@ -9,7 +9,7 @@ struct ContentView: View {
     @State private var hasStartedScan = false
     @State private var sortedRoot: FileNode?
     @State private var isSortingInProgress = false
-    @State private var selectedTheme: ColorTheme = .vibrant
+    @State private var selectedTheme: ColorTheme = .weighted
 
     private var selectedNode: FileNode? {
         guard let selectedPath, case .finished(let root) = coordinator.state else { return nil }
