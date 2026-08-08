@@ -87,21 +87,7 @@ class FileTreeCell: NSTableCellView {
             iconView.heightAnchor.constraint(equalToConstant: 16)
         ])
 
-        // Create text view
-        let textField = NSTextField()
-        textField.translatesAutoresizingMaskIntoConstraints = false
-        textField.isBezeled = false
-        textField.drawsBackground = false
-        textField.isEditable = false
-        textField.font = .systemFont(ofSize: 13)
-        addSubview(textField)
-        NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
-            textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            textField.centerYAnchor.constraint(equalTo: centerYAnchor)
-        ])
-
-        // Create size view
+        // Create size view first (right side, fixed width)
         let sizeField = NSTextField()
         sizeField.translatesAutoresizingMaskIntoConstraints = false
         sizeField.isBezeled = false
@@ -110,11 +96,29 @@ class FileTreeCell: NSTableCellView {
         sizeField.font = .systemFont(ofSize: 11)
         sizeField.textColor = .secondaryLabelColor
         sizeField.alignment = .right
+        sizeField.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        sizeField.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
         addSubview(sizeField)
         NSLayoutConstraint.activate([
             sizeField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             sizeField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            sizeField.widthAnchor.constraint(equalToConstant: 80)
+            sizeField.widthAnchor.constraint(greaterThanOrEqualToConstant: 70)
+        ])
+
+        // Create text view (flexible, gets remaining space)
+        let textField = NSTextField()
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        textField.isBezeled = false
+        textField.drawsBackground = false
+        textField.isEditable = false
+        textField.font = .systemFont(ofSize: 13)
+        textField.lineBreakMode = .byTruncatingTail
+        textField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(textField)
+        NSLayoutConstraint.activate([
+            textField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
+            textField.trailingAnchor.constraint(equalTo: sizeField.leadingAnchor, constant: -8),
+            textField.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
 
         self.imageView = iconView
