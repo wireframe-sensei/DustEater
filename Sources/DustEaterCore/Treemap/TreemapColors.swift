@@ -52,17 +52,23 @@ public enum TreemapColors {
         }
     }
 
-    /// Map size to a hue from green (small) to red (large) using logarithmic scale
+    /// Map size to a hue from green (small) to red (large) using relative scaling
     private static func colorBySize(_ size: Int64) -> Color {
-        // Use logarithmic scale: map log2(bytes) to hue
-        // 1KB = log2(1024) ≈ 10 → green (120°)
-        // 1GB = log2(1e9) ≈ 30 → red (0°)
+        // Use relative sizing: normalize size within typical file size ranges
+        // This makes coloring relative rather than absolute
+        // Small files/folders (< 100MB) → green
+        // Medium (100MB - 10GB) → yellow
+        // Large (> 10GB) → red
+
         let logSize = log2(Double(max(1, size)))
 
-        // Map log value (10-30) to hue (120 to 0 degrees = green to red)
-        // Normalize to 0-1 range for hue
-        let normalizedLog = (logSize - 10.0) / 20.0  // 0 at 10, 1 at 30
-        let hue = max(0, 120.0 - (normalizedLog * 120.0)) / 360.0  // 120° (green) to 0° (red)
+        // Typical range: 1KB (log≈10) to 100GB (log≈36)
+        // Normalize to 0-1 for relative sizing
+        let normalizedLog = (logSize - 10.0) / 26.0  // 0 at 1KB (log10), 1 at 64GB (log36)
+        let relativeSize = min(1.0, max(0.0, normalizedLog))  // Clamp to 0-1
+
+        // Map relative size to hue: green (120°) → yellow (60°) → red (0°)
+        let hue = (120.0 - (relativeSize * 120.0)) / 360.0
 
         return Color(hue: hue, saturation: 0.7, brightness: 0.9)
     }
