@@ -311,6 +311,17 @@ struct MainContentView: View {
                 // Header
                 VStack(spacing: DustEaterTheme.Spacing.sm) {
                     HStack {
+                        if coordinator.zoomNode != nil {
+                            Button {
+                                coordinator.zoomNode = nil
+                                selectedPath = root.path
+                            } label: {
+                                Image(systemName: "chevron.left")
+                            }
+                            .keyboardShortcut(.escape)
+                            .help("Back to overview")
+                        }
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Hierarchy View")
                                 .font(DustEaterTheme.Typography.caption)
@@ -335,40 +346,27 @@ struct MainContentView: View {
 
                         Spacer()
 
-                        HStack(spacing: DustEaterTheme.Spacing.md) {
-                            Menu {
-                                ForEach(ColorTheme.allCases, id: \.self) { theme in
-                                    Button {
-                                        selectedTheme = theme
-                                    } label: {
-                                        HStack {
-                                            Text(theme.displayName)
-                                            if theme == selectedTheme {
-                                                Image(systemName: "checkmark")
-                                            }
+                        Menu {
+                            ForEach(ColorTheme.allCases, id: \.self) { theme in
+                                Button {
+                                    selectedTheme = theme
+                                } label: {
+                                    HStack {
+                                        Text(theme.displayName)
+                                        if theme == selectedTheme {
+                                            Image(systemName: "checkmark")
                                         }
                                     }
                                 }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "paintpalette")
-                                    Text(selectedTheme.displayName)
-                                        .font(.caption)
-                                }
                             }
-                            .help("Change color theme")
-
-                            if coordinator.zoomNode != nil {
-                                Button {
-                                    coordinator.zoomNode = nil
-                                    selectedPath = root.path
-                                } label: {
-                                    Image(systemName: "chevron.left")
-                                }
-                                .keyboardShortcut(.escape)
-                                .help("Back to overview")
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "paintpalette")
+                                Text(selectedTheme.displayName)
+                                    .font(.caption)
                             }
                         }
+                        .help("Change color theme")
                     }
                 }
                 .padding(DustEaterTheme.Spacing.md)
