@@ -86,7 +86,8 @@
       "Bash(git commit -m 'Move back button to left side of header *)",
       "Bash(git commit -m 'Add disk selection home screen with back navigation *)",
       "Bash(git commit -m 'Filter out system volumes from disk list *)",
-      "Bash(git commit -m 'Add info tooltip explaining hard link size accounting *)"
+      "Bash(git commit -m 'Add info tooltip explaining hard link size accounting *)",
+      "Bash(git commit -m 'Add pointing hand cursor to all clickable elements *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

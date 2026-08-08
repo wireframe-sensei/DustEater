@@ -86,6 +86,13 @@ struct DiskHomeView: View {
                     .foregroundStyle(.primary)
                 }
                 .buttonStyle(.plain)
+                .onHover { isHovered in
+                    if isHovered {
+                        NSCursor.pointingHand.set()
+                    } else {
+                        NSCursor.arrow.set()
+                    }
+                }
             }
             .padding(DustEaterTheme.Spacing.md)
         }
@@ -189,6 +196,13 @@ struct DiskRowView: View {
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
+        .onHover { isHovered in
+            if isHovered {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
     }
 
     private var usageColor: Color {

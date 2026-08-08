@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import DustEaterCore
 
 struct TreemapView: View {
@@ -27,8 +28,14 @@ struct TreemapView: View {
             .onContinuousHover { phase in
                 if case .active(let location) = phase {
                     hoveredId = rects.first { $0.contains(point: location) }?.id
+                    if hoveredId != nil {
+                        NSCursor.pointingHand.set()
+                    } else {
+                        NSCursor.arrow.set()
+                    }
                 } else {
                     hoveredId = nil
+                    NSCursor.arrow.set()
                 }
             }
 
