@@ -297,7 +297,7 @@ struct MainContentView: View {
                                 Image(systemName: "info.circle")
                                     .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
-                                    .help("Folder sizes may exceed total disk usage due to hard links")
+                                    .help("Folder sizes are approximate. Hard-linked files and deduplication mean the sum will exceed actual disk usage. True usage is shown on home screen.")
                             }
 
                             Text(root.name)
