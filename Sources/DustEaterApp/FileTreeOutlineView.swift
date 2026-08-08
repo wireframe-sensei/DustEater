@@ -75,51 +75,29 @@ class FileTreeCell: NSTableCellView {
     }
 
     private func setupCell() {
-        // Create icon view
-        let iconView = NSImageView()
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        // Use simple frame-based layout without constraints for performance
+        let iconView = NSImageView(frame: NSRect(x: 4, y: 0, width: 16, height: 20))
+        iconView.autoresizingMask = []
         addSubview(iconView)
-        NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 16),
-            iconView.heightAnchor.constraint(equalToConstant: 16)
-        ])
 
-        // Create size view first (right side, fixed width)
-        let sizeField = NSTextField()
-        sizeField.translatesAutoresizingMaskIntoConstraints = false
+        let sizeField = NSTextField(frame: NSRect(x: bounds.width - 80, y: 0, width: 76, height: 20))
         sizeField.isBezeled = false
         sizeField.drawsBackground = false
         sizeField.isEditable = false
         sizeField.font = .systemFont(ofSize: 11)
         sizeField.textColor = .secondaryLabelColor
         sizeField.alignment = .right
-        sizeField.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        sizeField.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        sizeField.autoresizingMask = [.minXMargin]
         addSubview(sizeField)
-        NSLayoutConstraint.activate([
-            sizeField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            sizeField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            sizeField.widthAnchor.constraint(greaterThanOrEqualToConstant: 70)
-        ])
 
-        // Create text view (flexible, gets remaining space)
-        let textField = NSTextField()
-        textField.translatesAutoresizingMaskIntoConstraints = false
+        let textField = NSTextField(frame: NSRect(x: 28, y: 0, width: bounds.width - 110, height: 20))
         textField.isBezeled = false
         textField.drawsBackground = false
         textField.isEditable = false
         textField.font = .systemFont(ofSize: 13)
         textField.lineBreakMode = .byTruncatingTail
-        textField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textField.autoresizingMask = [.width]
         addSubview(textField)
-        NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
-            textField.trailingAnchor.constraint(equalTo: sizeField.leadingAnchor, constant: -8),
-            textField.centerYAnchor.constraint(equalTo: centerYAnchor)
-        ])
 
         self.imageView = iconView
         self.textField = textField
