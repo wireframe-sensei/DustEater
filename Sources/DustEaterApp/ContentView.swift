@@ -350,7 +350,11 @@ struct MainContentView: View {
                                     }
                                 }
                             } label: {
-                                Image(systemName: "paintpalette")
+                                HStack(spacing: 6) {
+                                    Image(systemName: "paintpalette")
+                                    Text(selectedTheme.displayName)
+                                        .font(.caption)
+                                }
                             }
                             .help("Change color theme")
 

@@ -81,7 +81,8 @@
       "Bash(git commit -m 'Fix: Weighted theme crash by using colorForNode *)",
       "Bash(git commit -m 'Change Weighted theme to relative sizing instead of absolute *)",
       "Bash(git commit -m 'Set Weighted theme as default *)",
-      "Bash(git commit -m 'Move theme name from header to theme menu *)"
+      "Bash(git commit -m 'Move theme name from header to theme menu *)",
+      "Bash(git commit -m 'Show current theme name in palette menu button *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"
