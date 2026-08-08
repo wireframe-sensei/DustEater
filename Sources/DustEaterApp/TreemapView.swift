@@ -69,43 +69,41 @@ struct TreemapView: View {
             if let hoveredId, let hovered = rects.first(where: { $0.id == hoveredId }) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(hovered.node.name)
-                        .font(.system(size: 15, weight: .semibold, design: .default))
+                        .font(.system(size: 14, weight: .semibold, design: .default))
                         .lineLimit(1)
 
                     Divider()
                         .frame(height: 1)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Label {
-                                Text(ByteFormatter.string(fromBytes: hovered.node.size))
-                                    .font(.system(.body, design: .monospaced))
-                            } icon: {
-                                Image(systemName: hovered.node.isDirectory ? "folder.fill" : "doc.fill")
-                                    .font(.system(size: 11))
-                            }
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 6) {
+                            Image(systemName: hovered.node.isDirectory ? "folder.fill" : "doc.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                            Text(ByteFormatter.string(fromBytes: hovered.node.size))
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(.secondary)
                         }
 
                         if hovered.node.isDirectory {
-                            HStack(spacing: 8) {
-                                Label {
-                                    Text("\(hovered.node.itemCount) items")
-                                        .font(.system(.caption, design: .default))
-                                } icon: {
-                                    Image(systemName: "square.grid.2x2")
-                                        .font(.system(size: 10))
-                                }
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.grid.2x2")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                                Text("\(hovered.node.itemCount) items")
+                                    .font(.system(size: 11, design: .default))
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
                 }
-                .padding(12)
+                .padding(10)
+                .frame(width: 200, alignment: .leading)
                 .background(Color(nsColor: .controlBackgroundColor))
                 .cornerRadius(10)
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
-                .position(x: min(mouseLocation.x + 16, 400), y: mouseLocation.y - 20)
+                .offset(x: 12, y: -35)
+                .position(x: mouseLocation.x, y: mouseLocation.y)
             }
         }
     }
