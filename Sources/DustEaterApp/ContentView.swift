@@ -131,6 +131,8 @@ struct ContentView: View {
         panel.prompt = "Scan"
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        isOnHome = false
         selectedPath = nil
         coordinator.zoomNode = nil
         sortedRoot = nil
