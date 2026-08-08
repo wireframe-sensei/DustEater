@@ -61,6 +61,26 @@ public actor DiskScanner {
         handler?(ScanProgress(itemsScanned: itemsScanned, bytesScanned: bytesScanned, currentPath: path))
     }
 
+    /// Directories to skip - mostly system dirs with heavy hard-linking that
+    /// distort user-visible disk usage breakdown
+    private static let skipDirs = Set([
+        "System", "Library", "opt", "private", "usr", "bin", "sbin", "var",
+        "etc", "tmp", "dev", "proc", "Volumes", "cores"
+    ])
+
+    /// Check if a directory should be skipped due to hard links or being system-owned
+    private static func shouldSkipDirectory(_ name: String, at path: String) -> Bool {
+        // Skip if it's a known system directory at root level
+        if path == "/" && skipDirs.contains(name) {
+            return true
+        }
+        // Skip hidden directories (starting with .)
+        if name.hasPrefix(".") {
+            return true
+        }
+        return false
+    }
+
     /// Recursively scans one directory. Files are summed directly; each
     /// subdirectory is scanned in its own child task, and results are
     /// folded together as they complete.
@@ -86,6 +106,11 @@ public actor DiskScanner {
 
         for entry in entries where !entry.isSymlink {
             if entry.isDirectory {
+                // Skip system directories that cause hard link duplication
+                // and aren't relevant to user's disk usage analysis
+                if shouldSkipDirectory(entry.name, at: path) {
+                    continue
+                }
                 subdirEntries.append(entry)
             } else {
                 fileTotal += entry.allocSize
