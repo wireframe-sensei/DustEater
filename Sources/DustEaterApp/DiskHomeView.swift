@@ -108,6 +108,11 @@ struct DiskHomeView: View {
         for url in urls {
             let path = url.path
 
+            // Filter out system volumes (APFS snapshots, preboot, VM, etc.)
+            if path.contains("/System/Volumes/") || path.contains("/.") {
+                continue
+            }
+
             do {
                 let values = try url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey, .nameKey])
 
