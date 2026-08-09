@@ -348,13 +348,6 @@ struct MainContentView: View {
                 // Files just get highlighted in the current view
             }
             .navigationSplitViewColumnWidth(min: 280, ideal: 300, max: 350)
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                        .help("Folder sizes are approximate. Hard-linked files and deduplication mean the sum will exceed actual disk usage. True usage is shown on home screen.")
-                }
-            }
         } detail: {
             // Main treemap with hierarchical levels
             VStack(spacing: 0) {
@@ -394,6 +387,15 @@ struct MainContentView: View {
                 }
 
                 ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        onBackToHome()
+                    } label: {
+                        Label("Home", systemImage: "house")
+                    }
+                    .help("Back to home screen")
+                }
+
+                ToolbarItem(placement: .primaryAction) {
                     Menu {
                         ForEach(ColorTheme.allCases, id: \.self) { theme in
                             Button {
@@ -415,12 +417,9 @@ struct MainContentView: View {
                 }
 
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        onBackToHome()
-                    } label: {
-                        Label("Home", systemImage: "house")
-                    }
-                    .help("Back to home screen")
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .help("Folder sizes are approximate. Hard-linked files and deduplication mean the sum will exceed actual disk usage. True usage is shown on home screen.")
                 }
             }
         }
