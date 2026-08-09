@@ -187,10 +187,10 @@ struct CustomFolderCardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 160)
             .padding(16)
+            .contentShape(Rectangle())
             .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
         .pointingHandCursor()
     }
 }
