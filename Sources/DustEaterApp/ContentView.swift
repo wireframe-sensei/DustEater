@@ -5,7 +5,7 @@ import DustEaterCore
 struct ContentView: View {
     @State private var coordinator = ScanCoordinator()
     @State private var selectedPath: String?
-    @State private var showSidebar = true
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var selectedTheme: ColorTheme = .weighted
     @State private var isOnHome = true
     @State private var totalDiskSize: Int64 = 0
@@ -55,7 +55,7 @@ struct ContentView: View {
                         selectedPath: $selectedPath,
                         coordinator: coordinator,
                         treemapRects: treemapRects(for:),
-                        showSidebar: $showSidebar,
+                        columnVisibility: $columnVisibility,
                         selectedTheme: $selectedTheme,
                         onBackToHome: {
                             isOnHome = true
@@ -328,7 +328,7 @@ struct MainContentView: View {
     @Binding var selectedPath: String?
     let coordinator: ScanCoordinator
     let treemapRects: (CGSize) -> [TreemapRect]
-    @Binding var showSidebar: Bool
+    @Binding var columnVisibility: NavigationSplitViewVisibility
     @Binding var selectedTheme: ColorTheme
     let onBackToHome: () -> Void
 
@@ -338,7 +338,7 @@ struct MainContentView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             // Sidebar: File tree for navigation
             VStack(spacing: 0) {
                 VStack(spacing: DustEaterTheme.Spacing.sm) {
@@ -376,11 +376,8 @@ struct MainContentView: View {
                     // Files just get highlighted in the current view
                 }
             }
-            .frame(minWidth: 280, maxWidth: 350)
-            .background(.regularMaterial)
-
-            Divider()
-
+            .navigationSplitViewColumnWidth(min: 280, ideal: 300, max: 350)
+        } detail: {
             // Main treemap with hierarchical levels
             VStack(spacing: 0) {
                 // Header
