@@ -3,3 +3,4 @@
 *.xcodeproj
 .DS_Store
 *.dSYM
+Packaging/AppIcon.iconset/
