@@ -46,18 +46,35 @@ macOS 26+, and an equivalent Material-based appearance on macOS 14-25. You
 don't need to pick a version for your system; the same DMG is correct
 either way.
 
-> [!NOTE]
-> These builds are **unsigned** (no Apple Developer Program membership
-> behind this project yet), so macOS Gatekeeper will flag the app as being
-> from an unidentified developer, or say it's damaged. After dragging
-> `DustEater.app` to Applications, either **right-click it → Open** (and
-> confirm in the dialog that appears), or run:
-> ```sh
-> xattr -cr /Applications/DustEater.app
-> ```
-> This is a one-time step per download - it's not a sign of anything wrong
-> with the app, just the standard consequence of shipping without a paid
-> code-signing certificate.
+### Opening the app for the first time
+
+These builds are **unsigned** (no Apple Developer Program membership behind
+this project yet), so macOS Gatekeeper will prevent the app from opening
+initially. Here's how to bypass this one-time:
+
+1. **Drag `DustEater.app` to your Applications folder** from the DMG
+
+2. **Try to open the app** - you'll see a dialog like this:
+   ![Dialog showing "DustEater cannot be opened because it is from an unidentified developer"](public/Not%20Opened%20Dialog.png)
+
+3. **Click "Done"** on that dialog
+
+4. **Open System Settings → Privacy & Security** and scroll down to the
+   "Security" section. You'll see DustEater listed with an "Open Anyway"
+   button:
+   ![System Settings showing DustEater with "Open Anyway" button](public/Open%20Anyway%20in%20Settings.png)
+
+5. **Click "Open Anyway"** - the app will now launch and you won't see this
+   warning again
+
+This is a one-time step per download - it's not a sign of anything wrong
+with the app, just the standard consequence of shipping without a paid
+code-signing certificate. Alternatively, you can run this in Terminal to
+skip the Settings step:
+```sh
+xattr -cr /Applications/DustEater.app
+```
+Then open the app normally.
 
 ## Requirements
 
