@@ -340,127 +340,24 @@ struct MainContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // Sidebar: File tree for navigation
-            VStack(spacing: 0) {
-                VStack(spacing: DustEaterTheme.Spacing.sm) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 4) {
-                                Text("Files & Folders")
-                                    .font(DustEaterTheme.Typography.caption)
-                                    .foregroundStyle(.secondary)
-                                    .textCase(.uppercase)
-                                    .tracking(0.5)
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                                    .help("Folder sizes are approximate. Hard-linked files and deduplication mean the sum will exceed actual disk usage. True usage is shown on home screen.")
-                            }
-
-                            Text(root.name)
-                                .font(DustEaterTheme.Typography.headline)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                    }
+            FileTreeListView(root: root, selectedPath: $selectedPath) { node in
+                // Only zoom into directories, not files
+                if node.isDirectory {
+                    coordinator.zoomNode = node
                 }
-                .padding(DustEaterTheme.Spacing.md)
-                .background(.bar)
-
-                Divider()
-
-                FileTreeListView(root: root, selectedPath: $selectedPath) { node in
-                    // Only zoom into directories, not files
-                    if node.isDirectory {
-                        coordinator.zoomNode = node
-                    }
-                    // Files just get highlighted in the current view
-                }
+                // Files just get highlighted in the current view
             }
             .navigationSplitViewColumnWidth(min: 280, ideal: 300, max: 350)
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .help("Folder sizes are approximate. Hard-linked files and deduplication mean the sum will exceed actual disk usage. True usage is shown on home screen.")
+                }
+            }
         } detail: {
             // Main treemap with hierarchical levels
             VStack(spacing: 0) {
-                // Header
-                VStack(spacing: DustEaterTheme.Spacing.sm) {
-                    HStack {
-                        if coordinator.zoomNode != nil {
-                            Button {
-                                coordinator.zoomNode = nil
-                                selectedPath = nil
-                            } label: {
-                                Image(systemName: "chevron.left")
-                            }
-                            .keyboardShortcut(.escape)
-                            .help("Back to overview")
-                            .pointingHandCursor()
-                        }
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Hierarchy View")
-                                .font(DustEaterTheme.Typography.caption)
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .tracking(0.5)
-
-                            if let zoomNode = coordinator.zoomNode {
-                                Text(zoomNode.name)
-                                    .font(DustEaterTheme.Typography.headline)
-                                    .lineLimit(1)
-                            } else {
-                                HStack(spacing: DustEaterTheme.Spacing.sm) {
-                                    Text("Overview")
-                                        .font(DustEaterTheme.Typography.headline)
-                                    Text("• Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
-                                        .font(DustEaterTheme.Typography.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-
-                        Spacer()
-
-                        Menu {
-                            ForEach(ColorTheme.allCases, id: \.self) { theme in
-                                Button {
-                                    selectedTheme = theme
-                                } label: {
-                                    HStack {
-                                        Text(theme.displayName)
-                                            .font(.control)
-                                        if theme == selectedTheme {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "paintpalette")
-                                Text(selectedTheme.displayName)
-                                    .font(.control)
-                            }
-                        }
-                        .help("Change color theme")
-                        .pointingHandCursor()
-
-                        Button {
-                            onBackToHome()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "house")
-                                Text("Home")
-                                    .font(.control)
-                            }
-                        }
-                        .help("Back to home screen")
-                        .pointingHandCursor()
-                    }
-                }
-                .padding(DustEaterTheme.Spacing.md)
-                .background(.bar)
-
-                Divider()
-
                 // Hierarchical treemap or file details
                 if let selectedNode = selectedNode, !selectedNode.isDirectory {
                     // Show file details when a file is selected
@@ -478,6 +375,52 @@ struct MainContentView: View {
                             }
                         )
                     }
+                }
+            }
+            .navigationTitle(coordinator.zoomNode?.name ?? root.name)
+            .navigationSubtitle("Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    if coordinator.zoomNode != nil {
+                        Button {
+                            coordinator.zoomNode = nil
+                            selectedPath = nil
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .keyboardShortcut(.escape)
+                        .help("Back to overview")
+                    }
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        ForEach(ColorTheme.allCases, id: \.self) { theme in
+                            Button {
+                                selectedTheme = theme
+                            } label: {
+                                HStack {
+                                    Text(theme.displayName)
+                                        .font(.control)
+                                    if theme == selectedTheme {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(selectedTheme.displayName, systemImage: "paintpalette")
+                    }
+                    .help("Change color theme")
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        onBackToHome()
+                    } label: {
+                        Label("Home", systemImage: "house")
+                    }
+                    .help("Back to home screen")
                 }
             }
         }
