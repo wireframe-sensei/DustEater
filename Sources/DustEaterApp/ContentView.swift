@@ -364,7 +364,7 @@ struct MainContentView: View {
                     }
                 }
                 .padding(DustEaterTheme.Spacing.md)
-                .background(.ultraThinMaterial)
+                .background(.bar)
 
                 Divider()
 
@@ -377,7 +377,7 @@ struct MainContentView: View {
                 }
             }
             .frame(minWidth: 280, maxWidth: 350)
-            .background(.ultraThinMaterial)
+            .background(.regularMaterial)
 
             Divider()
 
@@ -460,7 +460,7 @@ struct MainContentView: View {
                     }
                 }
                 .padding(DustEaterTheme.Spacing.md)
-                .background(.ultraThinMaterial)
+                .background(.bar)
 
                 Divider()
 

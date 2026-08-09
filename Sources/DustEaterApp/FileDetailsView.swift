@@ -59,7 +59,7 @@ struct FileDetailsView: View {
                 }
             }
             .padding(DustEaterTheme.Spacing.md)
-            .background(.ultraThinMaterial)
+            .background(.bar)
 
             Divider()
 
