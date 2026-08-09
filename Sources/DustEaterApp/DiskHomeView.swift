@@ -262,12 +262,12 @@ struct DiskCardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 160)
             .padding(16)
+            .contentShape(Rectangle())
             .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
             .foregroundStyle(.primary)
             .opacity(isHovered ? 0.9 : 1.0)
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
         .pointingHandCursor()
         .onContinuousHover { phase in
             if case .active = phase {
