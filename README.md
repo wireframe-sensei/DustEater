@@ -122,6 +122,22 @@ Tests/
 AppKit, so the scanning/layout logic is testable and reusable independent of
 the GUI.
 
+## Roadmap & Future Improvements
+
+Planned enhancements and known deferred items:
+
+- **Appearance-aware color themes** - add per-appearance (light/dark) variants
+  of the six treemap color themes for better visual consistency across system
+  appearance changes.
+- **Pastel theme contrast fix** - improve white tile-label contrast on light
+  tiles in the Pastel color theme.
+- **Async tree sorting** - defer sorting until after the initial scan completes
+  to improve scan responsiveness on very large volumes.
+- **Export/reporting** - support exporting scan results to common formats
+  (CSV, JSON) for analysis or sharing.
+
+See [CLAUDE.md](CLAUDE.md) for notes on why certain items are deferred.
+
 ## License
 
 MIT - see [LICENSE](LICENSE). One file
