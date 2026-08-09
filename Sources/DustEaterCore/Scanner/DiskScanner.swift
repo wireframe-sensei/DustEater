@@ -103,6 +103,10 @@ public actor DiskScanner {
         seenInodes: OSAllocatedUnfairLock<Set<UInt64>>,
         onEntries: @escaping @Sendable (Int, Int64, String) async -> Void
     ) async -> FileNode {
+        guard !Task.isCancelled else {
+            return FileNode(name: name, path: path, size: 0, isDirectory: true)
+        }
+
         let entries: [RawDirEntry]
         do {
             entries = try await BlockingIO.run { try AttrListBulkReader.listDirectory(atPath: path) }
@@ -143,6 +147,17 @@ public actor DiskScanner {
             }
         }
 
+        guard !Task.isCancelled else {
+            return FileNode(
+                name: name,
+                path: path,
+                size: fileTotal,
+                isDirectory: true,
+                children: fileChildren,
+                itemCount: fileChildren.count + 1
+            )
+        }
+
         await onEntries(fileChildren.count, fileTotal, path)
 
         guard !subdirEntries.isEmpty else {
@@ -161,6 +176,8 @@ public actor DiskScanner {
 
         await withTaskGroup(of: FileNode.self) { group in
             for entry in subdirEntries {
+                guard !Task.isCancelled else { break }
+
                 var childPath = path
                 childPath.append("/")
                 childPath.append(entry.name)
