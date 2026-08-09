@@ -14,7 +14,7 @@ struct DustEaterApp: App {
     }
 
     /// A packaged release `.app` already gets its icon from
-    /// `Packaging/Info.plist`'s `CFBundleIconFile` — this is a no-op there.
+    /// `Packaging/Info.plist`'s `CFBundleIconFile` - this is a no-op there.
     /// It's for `swift run`, which launches a bare unbundled executable
     /// with no Info.plist at all, so without this the Dock would show the
     /// generic default icon during local development.

@@ -17,7 +17,7 @@ struct FileNodeTests {
     }
 
     /// Replaces the old `find(path:)` this app used to walk the whole tree
-    /// with on every selection change — `node(atPath:)` descends by path
+    /// with on every selection change - `node(atPath:)` descends by path
     /// component instead, so this pins down its three basic behaviors:
     /// finding the root itself, finding a nested descendant, and correctly
     /// reporting a miss instead of crashing or matching the wrong node.

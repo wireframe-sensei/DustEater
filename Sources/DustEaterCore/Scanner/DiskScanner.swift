@@ -13,19 +13,19 @@ public struct ScanProgress: Sendable {
 /// Traversal is parallelized with `TaskGroup`: each subdirectory is scanned
 /// in its own child task, and results are combined functionally as tasks
 /// complete (`for await`), so there is no shared mutable state and thus no
-/// locking is needed to accumulate sizes — each level simply sums the sizes
+/// locking is needed to accumulate sizes - each level simply sums the sizes
 /// its children returned.
 ///
-/// Task fan-out itself is intentionally *unbounded* — Swift tasks are cheap
+/// Task fan-out itself is intentionally *unbounded* - Swift tasks are cheap
 /// (they multiplex over the cooperative pool at suspension points rather
-/// than consuming an OS thread each) — so gating task creation with a
+/// than consuming an OS thread each) - so gating task creation with a
 /// shared permit pool is both unnecessary and dangerous here: a whole
 /// generation of sibling directories could simultaneously hold the last
 /// free permits while each waits to acquire one more permit to recurse into
 /// its own children, with no task left running to ever release one. That
 /// exact scenario deadlocked an earlier version of this scanner on wide,
 /// deep trees (e.g. npm's hashed cache directories). The only genuinely
-/// scarce resource — OS threads doing blocking syscalls — is bounded
+/// scarce resource - OS threads doing blocking syscalls - is bounded
 /// separately and non-recursively by `BlockingIO`'s dispatch queue, which
 /// has no such circular dependency.
 public actor DiskScanner {
@@ -34,7 +34,7 @@ public actor DiskScanner {
     /// Guarded by a raw lock rather than actor isolation: dedup is checked
     /// once per *file* (not per directory), so it sits on the hottest path
     /// in the whole scan. Actor isolation would force every one of those
-    /// checks — across every concurrently-running directory task — to funnel
+    /// checks - across every concurrently-running directory task - to funnel
     /// through this actor's single serial executor, capping the CPU-bound
     /// part of the scan (as opposed to the I/O, which genuinely parallelizes
     /// via `BlockingIO`) to one core. `OSAllocatedUnfairLock` is a plain
@@ -92,7 +92,7 @@ public actor DiskScanner {
     /// folded together as they complete. Uses inode tracking to deduplicate
     /// hard-linked files so they're only counted once.
     ///
-    /// `static`, not an instance method — this keeps the CPU-bound tree
+    /// `static`, not an instance method - this keeps the CPU-bound tree
     /// construction (as opposed to `reportProgress`'s bookkeeping) off the
     /// actor's serial executor entirely, so sibling directory tasks in the
     /// `TaskGroup` below can genuinely run concurrently instead of each

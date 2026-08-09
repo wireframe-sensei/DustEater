@@ -29,13 +29,13 @@ enum AttrListError: Error, CustomStringConvertible {
 
 /// A small free-list of reusable `getattrlistbulk` buffers.
 ///
-/// `listDirectory` is called once per directory — hundreds of thousands of
-/// times on a large tree — and each call used to allocate *and zero-fill* a
+/// `listDirectory` is called once per directory - hundreds of thousands of
+/// times on a large tree - and each call used to allocate *and zero-fill* a
 /// fresh 64 KiB buffer, even though `getattrlistbulk` immediately overwrites
 /// whatever portion it uses and the parsing loop below never reads past what
 /// the kernel actually wrote. Pooling avoids that per-call alloc + zero.
 /// `BlockingIO`'s semaphore already bounds how many callers run at once, so
-/// this pool's size is implicitly bounded by the same limit — it just never
+/// this pool's size is implicitly bounded by the same limit - it just never
 /// shrinks back down, trading a small amount of steady-state memory for
 /// avoiding repeated allocation churn.
 private final class BufferPool: Sendable {

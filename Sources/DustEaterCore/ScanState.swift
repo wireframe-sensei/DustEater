@@ -16,7 +16,7 @@ public enum ScanState: Sendable, Equatable {
     case scanning(ScanProgressSnapshot)
     case finished(FileNode)
     /// The root path itself couldn't be opened due to a permission/TCC
-    /// denial — the scan never started. Surfaced separately from `.failed`
+    /// denial - the scan never started. Surfaced separately from `.failed`
     /// so the UI can offer a "grant Full Disk Access" call to action
     /// instead of a generic error message.
     case needsFullDiskAccess(path: String)

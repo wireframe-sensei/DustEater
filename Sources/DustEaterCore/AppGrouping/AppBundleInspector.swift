@@ -10,7 +10,7 @@ enum AppBundleInspector {
 
     /// Parses `<appPath>/Contents/Info.plist`. Falls back to deriving a
     /// display name from the bundle's filename if the plist is missing or
-    /// malformed — a corrupt/partial app shouldn't abort the whole scan.
+    /// malformed - a corrupt/partial app shouldn't abort the whole scan.
     static func inspect(appPath: String) async -> Info {
         let fallbackName = (appPath as NSString)
             .lastPathComponent

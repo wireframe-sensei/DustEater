@@ -11,7 +11,7 @@ public enum TreemapColors {
 
         // A single treemap render only ever shows one flat level of
         // siblings (the currently zoomed node's direct children), so
-        // `depth` is the same constant for every rect in it — it can't
+        // `depth` is the same constant for every rect in it - it can't
         // distinguish siblings on its own. Cycle through the *entire*
         // palette by name hash instead of just alternating between two
         // colors, so a folder full of subfolders doesn't collapse to one
@@ -41,7 +41,7 @@ public enum TreemapColors {
 
     /// Determines color based on whether the node is a directory or file.
     public static func colorForNode(_ node: FileNode, depth: Int, theme: ColorTheme) -> Color {
-        // Weighted theme uses size-based hue (green→red) — already varies
+        // Weighted theme uses size-based hue (green→red) - already varies
         // continuously per node, so it's left alone below.
         if theme == .weighted {
             return colorBySize(node.size)
@@ -49,7 +49,7 @@ public enum TreemapColors {
 
         let baseColor: Color
         if node.isDirectory {
-            // `name:` matters here — omitting it (as this used to) makes
+            // `name:` matters here - omitting it (as this used to) makes
             // every directory resolve to the exact same hash bucket, since
             // it silently falls back to the same `name: ""` default every
             // time. Combined with `depth` being constant per render (see
@@ -62,7 +62,7 @@ public enum TreemapColors {
 
         // `colorForFile` intentionally keys color to file-*type* (so every
         // "other" or "document" file shares a hue), and `colorForDirectory`
-        // only has 5ish hues to spread across potentially many siblings —
+        // only has 5ish hues to spread across potentially many siblings -
         // both mean real hash collisions in an ordinary folder. Nudge
         // brightness deterministically per node on top of the base hue so
         // same-category siblings still read as separate tiles instead of
@@ -74,7 +74,7 @@ public enum TreemapColors {
     /// Deterministic per-node brightness nudge, layered on top of a base
     /// color via opacity (the same mechanism `TreemapView` already uses to
     /// distinguish hovered from resting tiles) rather than decomposing into
-    /// HSB — keeps this a pure, cheap function with no color-space math.
+    /// HSB - keeps this a pure, cheap function with no color-space math.
     private static func siblingNudged(_ color: Color, seed: String) -> Color {
         let bucket = abs(seed.hashValue) % 5
         let opacityAdjustment = 1.0 - Double(bucket) * 0.06 // 1.00, 0.94, 0.88, 0.82, 0.76

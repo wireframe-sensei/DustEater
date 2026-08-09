@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Rather than silently inflating a `.app` node's `size` (which would break
 /// the invariant that a directory's size equals the sum of its children's
-/// sizes — something both the list view and the treemap in later phases
+/// sizes - something both the list view and the treemap in later phases
 /// rely on), this adds one synthetic "Associated App Data" child per app,
 /// broken down by category. The `.app` node's `size` still grows to the
 /// true total, but it stays honest about where the extra bytes come from.

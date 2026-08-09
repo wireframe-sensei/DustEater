@@ -9,7 +9,7 @@ public struct TreemapRect: Sendable, Identifiable {
     /// The rectangle's bounds in the treemap coordinate space (0...width, 0...height).
     public let frame: CGRect
     /// Resolved once at layout time (depends only on the node, its depth,
-    /// and the active theme — none of which change without a fresh layout),
+    /// and the active theme - none of which change without a fresh layout),
     /// so the renderer doesn't need to re-derive it on every redraw,
     /// including ones triggered purely by mouse movement during hover.
     /// Defaults to `.clear` for callers (like `TreemapLayout`, used only by

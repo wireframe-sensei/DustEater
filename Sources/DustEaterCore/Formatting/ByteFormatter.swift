@@ -18,7 +18,7 @@ public enum ByteFormatter {
         // bridging the `%@` argument through NSString on every call for
         // what's ultimately just "round to 2 decimals". Grouping is
         // disabled since `%.2f` never inserted thousands separators either
-        // — `value` here is always < 1024 by the loop above.
+        // - `value` here is always < 1024 by the loop above.
         let formattedValue = value.formatted(.number.precision(.fractionLength(2)).grouping(.never))
         return "\(formattedValue) \(units[unitIndex])"
     }

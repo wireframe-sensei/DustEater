@@ -22,7 +22,7 @@ struct TreemapColorsTests {
     /// Compares only hue-bearing RGB components, deliberately ignoring
     /// opacity. `colorForNode` layers a per-sibling opacity nudge on top of
     /// its base color, which on its own is enough to make every resulting
-    /// `Color` distinct — including in exactly the broken state this test
+    /// `Color` distinct - including in exactly the broken state this test
     /// guards against, where the *hue* never varied at all because `name:`
     /// wasn't reaching `colorForDirectory`. Comparing full `Color` values
     /// (opacity included) would pass either way and catch nothing.

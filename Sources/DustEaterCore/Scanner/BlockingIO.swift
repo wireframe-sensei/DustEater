@@ -23,7 +23,7 @@ enum BlockingIO {
     /// Caps how many blocking syscalls run at once. This is safe to gate
     /// with a plain semaphore (unlike task fan-out in `DiskScanner`) because
     /// each call is a self-contained leaf operation that never needs to
-    /// acquire a second permit from this same pool to complete — so there's
+    /// acquire a second permit from this same pool to complete - so there's
     /// no circular wait, just plain throttling of real OS thread usage.
     /// Higher limit allows more concurrent I/O for filesystem-heavy scanning.
     private static let concurrencyLimit = DispatchSemaphore(

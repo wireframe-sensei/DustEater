@@ -1,7 +1,7 @@
 import Testing
 @testable import DustEaterCore
 
-/// Locks in `ByteFormatter`'s output — added alongside the switch from
+/// Locks in `ByteFormatter`'s output - added alongside the switch from
 /// `String(format: "%.2f %@", ...)` to `.formatted()`, since that's a
 /// different formatting code path and the whole point was to change *how*
 /// the string gets built without changing *what* it says.
@@ -23,7 +23,7 @@ struct ByteFormatterTests {
 
     @Test func neverInsertsThousandsSeparators() {
         // Largest possible whole part before crossing a unit boundary is
-        // just under 1024 — must never render as "1,023.99".
+        // just under 1024 - must never render as "1,023.99".
         #expect(ByteFormatter.string(fromBytes: 1023) == "1023.00 B")
     }
 }

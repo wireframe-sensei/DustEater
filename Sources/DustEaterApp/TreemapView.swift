@@ -12,7 +12,7 @@ struct TreemapView: View {
 
     /// The hover highlight is this view's only accent-colored "this is the
     /// current selection" indicator, so it's the one that needs to track
-    /// window focus — same as a table's selected-row highlight desaturating
+    /// window focus - same as a table's selected-row highlight desaturating
     /// to gray the moment the window isn't key, instead of staying accent-
     /// colored while the app is in the background.
     private var highlightColor: Color {
@@ -20,7 +20,7 @@ struct TreemapView: View {
     }
 
     /// Rects large enough to carry a label, precomputed once per body
-    /// evaluation rather than filtered inside `ForEach`'s content closure —
+    /// evaluation rather than filtered inside `ForEach`'s content closure -
     /// so `ForEach` only ever diffs identities for rects that actually
     /// render something, instead of creating and immediately discarding a
     /// view per rect that's too small to label.
@@ -32,7 +32,7 @@ struct TreemapView: View {
         ZStack(alignment: .topLeading) {
             // Base layer: every rect's resting-state fill/stroke, using each
             // rect's precomputed `color`. Deliberately doesn't read
-            // `hoveredId` — moving the mouse across tiles must not
+            // `hoveredId` - moving the mouse across tiles must not
             // invalidate and re-run this full-level draw loop.
             Canvas { context, size in
                 for rect in rects {
@@ -153,8 +153,8 @@ struct TreemapView: View {
         }
     }
 
-    /// Resting-state draw. Uses the rect's precomputed `color` — no per-call
-    /// depth/theme lookup — since this runs once per rect on every base
+    /// Resting-state draw. Uses the rect's precomputed `color` - no per-call
+    /// depth/theme lookup - since this runs once per rect on every base
     /// `Canvas` redraw.
     private func drawRect(_ rect: TreemapRect, in context: inout GraphicsContext) {
         let path = Path(roundedRect: rect.frame, cornerRadius: TreemapMetrics.tileCornerRadius)

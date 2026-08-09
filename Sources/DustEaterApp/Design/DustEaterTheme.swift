@@ -20,7 +20,7 @@ enum DustEaterTheme {
     }
 
     // MARK: - Typography
-    // Content text — titles, descriptions, data values. Interface chrome
+    // Content text - titles, descriptions, data values. Interface chrome
     // (buttons, menus, toolbars, sidebar/table rows) uses `Font.control`
     // instead, defined in MacOSDesignTokens.swift.
     enum Typography {

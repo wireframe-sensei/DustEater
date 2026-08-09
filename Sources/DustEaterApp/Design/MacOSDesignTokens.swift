@@ -4,11 +4,11 @@ import AppKit
 /// Design tokens with no SwiftUI/AppKit semantic equivalent, per the macOS
 /// HIG design system kit (`.claude/skills/macos-hig-design-system`).
 extension Font {
-    /// Interface chrome — button labels, menu items, toolbar labels, and
+    /// Interface chrome - button labels, menu items, toolbar labels, and
     /// sidebar/table rows. The kit uses Medium 13pt for nearly all control
     /// chrome (108 of 111 button labels, 88 menu items, 126 toolbar labels,
     /// 192 sidebar items); no built-in SwiftUI semantic style provides
-    /// Medium weight — `.body` is Regular, `.headline` is Bold.
+    /// Medium weight - `.body` is Regular, `.headline` is Bold.
     static let control = Font.system(size: 13, weight: .medium)
 }
 
@@ -22,12 +22,12 @@ extension Font {
 /// its container set, the same way a real `Button` or `TextField` would.
 struct ControlMetrics: Equatable {
     let height: CGFloat
-    /// `Global/Radius` — the general control corner radius at this size.
-    /// This is *not* what a bordered button uses at Large/XL — see `isCapsule`.
+    /// `Global/Radius` - the general control corner radius at this size.
+    /// This is *not* what a bordered button uses at Large/XL - see `isCapsule`.
     let cornerRadius: CGFloat
     let fontSize: CGFloat
     /// `Button/Radius` aliases `Global/Radius` at Mini/Small/Medium, but
-    /// becomes `1000` (a full capsule) at Large and ExtraLarge — the
+    /// becomes `1000` (a full capsule) at Large and ExtraLarge - the
     /// macOS 26+ pill button shape. Only meaningful for a control that's
     /// actually drawing itself as a compact button; a large custom card or
     /// panel sized via `.controlSize(.extraLarge)` should use `cornerRadius`
@@ -51,7 +51,7 @@ struct ControlMetrics: Equatable {
         }
     }
 
-    /// The shape a *button-style* custom control should draw itself with —
+    /// The shape a *button-style* custom control should draw itself with -
     /// a full capsule at Large/XL per `Button/Radius`, a rounded rect below
     /// that. Cards and panels should use `cornerRadius` directly instead.
     var buttonShape: AnyShape {
@@ -60,7 +60,7 @@ struct ControlMetrics: Equatable {
 }
 
 extension EnvironmentValues {
-    /// Derived from the ambient `\.controlSize` — set `.controlSize()` on a
+    /// Derived from the ambient `\.controlSize` - set `.controlSize()` on a
     /// container and every custom control beneath it picks up the matching
     /// metrics automatically, the same way system controls do.
     var controlMetrics: ControlMetrics {
@@ -69,7 +69,7 @@ extension EnvironmentValues {
 }
 
 /// Builds a `Color` that resolves its RGBA per-appearance, the same way a
-/// dynamic `NSColor` would — used below for the one color in this file that
+/// dynamic `NSColor` would - used below for the one color in this file that
 /// has no system equivalent to just delegate to.
 private func adaptiveColor(light: (CGFloat, CGFloat, CGFloat, CGFloat),
                             dark: (CGFloat, CGFloat, CGFloat, CGFloat)) -> Color {
@@ -81,20 +81,20 @@ private func adaptiveColor(light: (CGFloat, CGFloat, CGFloat, CGFloat),
 }
 
 extension Color {
-    /// `Progress Bars/Track - Stroke` — #000 @7% light / #FFF @4% dark.
+    /// `Progress Bars/Track - Stroke` - #000 @7% light / #FFF @4% dark.
     /// `.quaternaryLabelColor` (10%) is the nearest semantic color but the
     /// kit specifies a fainter track than that, so this is a real gap, not
     /// laziness about reaching for the system color first (C4).
     static let progressTrack = adaptiveColor(light: (0, 0, 0, 0.07), dark: (1, 1, 1, 0.04))
 }
 
-/// Treemap tile geometry with no HIG/control-size equivalent — these are
+/// Treemap tile geometry with no HIG/control-size equivalent - these are
 /// data-visualization decisions (tile rounding, hover emphasis, label
 /// legibility cutoffs), not control chrome, so they don't belong on the
 /// `ControlMetrics` scale above (D8, D9).
 enum TreemapMetrics {
     /// Corner radius for both the resting-state tile fill and the hover
-    /// highlight — deliberately tiny; treemap tiles read as a dense mosaic,
+    /// highlight - deliberately tiny; treemap tiles read as a dense mosaic,
     /// not individually rounded cards.
     static let tileCornerRadius: CGFloat = 1
     /// Stroke width of the accent/gray hover outline drawn around the
@@ -112,7 +112,7 @@ enum TreemapMetrics {
     static let labelThresholdLargeFont: CGFloat = 120
 }
 
-/// Tooltip geometry with no HIG token — this app's tooltip is a custom
+/// Tooltip geometry with no HIG token - this app's tooltip is a custom
 /// SwiftUI overlay (not `.help()`), so its size and cursor-relative offset
 /// are just this component's own layout, not derived from any control size (D7).
 enum TooltipMetrics {
@@ -125,21 +125,21 @@ enum TooltipMetrics {
 
 extension View {
     /// Real Liquid Glass on macOS 26+, falling back to the given `Material`
-    /// everywhere else. Only for surfaces this app draws itself — sidebars,
+    /// everywhere else. Only for surfaces this app draws itself - sidebars,
     /// toolbars, and other real system chrome already render with genuine
     /// Liquid Glass automatically on macOS 26 and need no help here (per
     /// `swift.md`: "prefer the built-in `.glassEffect(...)` over
     /// reconstructing it").
     ///
-    /// `#available` only gates *runtime* behavior — `.glassEffect` still has
+    /// `#available` only gates *runtime* behavior - `.glassEffect` still has
     /// to be a real compiled symbol, which requires building against the
     /// macOS 26 SDK (bundled with Xcode 26 / Swift 6.2+). A toolchain older
-    /// than that — e.g. GitHub's `macos-15` hosted runner as of this
-    /// writing, still on Xcode 16.x — doesn't declare the symbol at all, so
+    /// than that - e.g. GitHub's `macos-15` hosted runner as of this
+    /// writing, still on Xcode 16.x - doesn't declare the symbol at all, so
     /// `#available` alone isn't enough; this fails to *compile* there, not
     /// just to run. `#if compiler(>=6.2)` excludes the whole branch from
     /// being type-checked on such toolchains, leaving only the Material
-    /// fallback — confirmed against a real CI failure on macos-15 runners.
+    /// fallback - confirmed against a real CI failure on macos-15 runners.
     @ViewBuilder
     func glassBackground(_ material: Material, cornerRadius: CGFloat) -> some View {
         #if compiler(>=6.2)

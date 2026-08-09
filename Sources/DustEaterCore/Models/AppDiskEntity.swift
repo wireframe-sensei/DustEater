@@ -55,7 +55,7 @@ public struct AppDiskEntity: Sendable, Identifiable {
         relatedItems.reduce(into: 0) { $0 += $1.size }
     }
 
-    /// The `.app` bundle size plus every associated hidden folder's size —
+    /// The `.app` bundle size plus every associated hidden folder's size -
     /// the number a WizTree-style "true size" view should show for this app.
     public var trueTotalSize: Int64 {
         appBundleSize + relatedTotalSize

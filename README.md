@@ -4,45 +4,45 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A native macOS disk usage analyzer. Scan a volume or folder and see where the
-space went in an interactive treemap — zoom into folders, inspect individual
+space went in an interactive treemap - zoom into folders, inspect individual
 files, and see app bundles rolled up with the data they leave behind in
 `~/Library`.
 
 Built with SwiftUI and AppKit, no external dependencies, distributed as a
 Swift package.
 
-![Overview screen — treemap with sidebar navigation](public/OverviewScreen.png)
+![Overview screen - treemap with sidebar navigation](public/OverviewScreen.png)
 
 <p align="center">
-  <img src="public/HomeScreen.png" width="49%" alt="Home screen — pick a disk or folder to analyze" />
+  <img src="public/HomeScreen.png" width="49%" alt="Home screen - pick a disk or folder to analyze" />
   <img src="public/LoadingScreen.png" width="49%" alt="Scanning in progress" />
 </p>
 
 ## Features
 
-- **Fast recursive scanning** — uses `getattrlistbulk` with concurrent
+- **Fast recursive scanning** - uses `getattrlistbulk` with concurrent
   `TaskGroup`s rather than `FileManager` enumeration, so large volumes scan
   quickly.
-- **Interactive treemap** — squarified treemap layout, click to zoom into a
+- **Interactive treemap** - squarified treemap layout, click to zoom into a
   folder, hover for details, seven color themes (including a size-weighted
   green→red gradient).
-- **App bundle grouping** — `.app` bundles are shown as one unit, with their
+- **App bundle grouping** - `.app` bundles are shown as one unit, with their
   actual footprint (caches, application support, logs, etc. in `~/Library`)
   cross-referenced and rolled into the bundle's true size rather than
   appearing as unexplained space elsewhere.
-- **File details view** — click any file in the sidebar tree to see its type,
+- **File details view** - click any file in the sidebar tree to see its type,
   size, and full path.
-- **Native chrome** — real `NavigationSplitView` sidebar and unified toolbar,
+- **Native chrome** - real `NavigationSplitView` sidebar and unified toolbar,
   semantic system colors and materials throughout, and genuine Liquid Glass
   on macOS 26+ (falls back to a Material-based approximation on earlier
-  systems — no separate build required).
+  systems - no separate build required).
 
 ## Download
 
 Grab the DMG from the [latest release](https://github.com/wireframe-sensei/DustEater/releases/latest).
-There's just the one download — it's a single universal binary (Apple
+There's just the one download - it's a single universal binary (Apple
 Silicon and Intel) that detects the OS at runtime: real Liquid Glass on
-macOS 26+, and an equivalent Material-based appearance on macOS 14–25. You
+macOS 26+, and an equivalent Material-based appearance on macOS 14-25. You
 don't need to pick a version for your system; the same DMG is correct
 either way.
 
@@ -55,19 +55,19 @@ either way.
 > ```sh
 > xattr -cr /Applications/DustEater.app
 > ```
-> This is a one-time step per download — it's not a sign of anything wrong
+> This is a one-time step per download - it's not a sign of anything wrong
 > with the app, just the standard consequence of shipping without a paid
 > code-signing certificate.
 
 ## Requirements
 
 - **To run it**: macOS 14 or later. The same binary renders real Liquid
-  Glass on macOS 26+ and a Material-based equivalent below that — nothing
+  Glass on macOS 26+ and a Material-based equivalent below that - nothing
   extra needed either way.
 - **To build it from source**: a Swift 6 toolchain (Xcode 16+). Note that
   which Xcode you build with matters for one thing specifically: the
   Liquid Glass code path only gets *compiled in* when built with Xcode 26+
-  (it needs the macOS 26 SDK to exist at all, not just to run on it) — a
+  (it needs the macOS 26 SDK to exist at all, not just to run on it) - a
   build made with an older Xcode still works everywhere, it just never
   renders true glass, only the Material fallback, regardless of what OS
   it's later run on. This is why prebuilt releases (see Download, above)
@@ -110,7 +110,7 @@ swift test
 ```
 Sources/
   DustEaterCore/   Scanning, the treemap layout algorithm, app-bundle
-                    grouping, and byte formatting — no UI dependencies.
+                    grouping, and byte formatting - no UI dependencies.
   DustEaterApp/     The SwiftUI/AppKit GUI.
   dustbench/        CLI: scan a path and report timing.
   appsizes/         CLI: true per-app disk footprint across /Applications.
@@ -124,13 +124,13 @@ the GUI.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). One file
+MIT - see [LICENSE](LICENSE). One file
 (`Sources/DustEaterCore/Treemap/YMTreeMap.swift`, Yahoo's squarified-treemap
 algorithm) is used under its original Apache License 2.0 terms; see
 [NOTICE](NOTICE) for the full text and attribution.
 
 ## Contributing
 
-Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+Issues and pull requests are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md)
 for setup, project layout, and PR guidelines. This project follows the
 [Code of Conduct](CODE_OF_CONDUCT.md).

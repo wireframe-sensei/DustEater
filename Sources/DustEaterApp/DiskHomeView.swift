@@ -157,7 +157,7 @@ struct DiskHomeView: View {
     }
 }
 
-/// A custom-drawn card, not a system button style — it draws its own
+/// A custom-drawn card, not a system button style - it draws its own
 /// background rather than delegating to `.borderedProminent`/`.bordered`,
 /// so unlike those it has to read its corner radius from `ControlMetrics`
 /// itself. Deliberately reads `cornerRadius` only, not `isCapsule`: this is
@@ -194,7 +194,7 @@ struct CustomFolderCardView: View {
     }
 }
 
-// See `CustomFolderCardView` above — same reasoning: a custom-drawn card,
+// See `CustomFolderCardView` above - same reasoning: a custom-drawn card,
 // so it reads its own corner radius from `ControlMetrics.cornerRadius`
 // rather than `isCapsule`.
 struct DiskCardView: View {

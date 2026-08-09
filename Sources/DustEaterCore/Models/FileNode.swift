@@ -3,7 +3,7 @@ import Foundation
 /// A node in the scanned filesystem tree.
 ///
 /// `size` is the on-disk allocated size in bytes (blocks actually consumed),
-/// not the logical/"apparent" size — this matches how tools like WizTree
+/// not the logical/"apparent" size - this matches how tools like WizTree
 /// report disk usage (sparse files, compressed files, and filesystem block
 /// rounding are reflected accurately). For directories, `size` is the sum
 /// of all descendant allocated sizes.
@@ -45,8 +45,8 @@ extension FileNode: Equatable, Hashable {
     /// for a struct holding `children: [FileNode]` recurse into every
     /// descendant, so a single comparison on a large scan's root would walk
     /// the entire tree. `path` already uniquely identifies a node within a
-    /// given scan (it's `id`), so equality only needs `path` + `size` — no
-    /// caller here needs "and every descendant is byte-identical too" — and
+    /// given scan (it's `id`), so equality only needs `path` + `size` - no
+    /// caller here needs "and every descendant is byte-identical too" - and
     /// hashing only `path` keeps that O(1) while still satisfying Hashable
     /// (equal nodes necessarily share a `path`, so their hashes agree).
     public static func == (lhs: FileNode, rhs: FileNode) -> Bool {
@@ -69,11 +69,11 @@ extension FileNode {
     }
 
     /// Looks up a descendant by its full path, descending one path component
-    /// at a time and matching by `name` — rather than scanning the whole
+    /// at a time and matching by `name` - rather than scanning the whole
     /// tree (the old `find(path:)`) or maintaining a separate `path → node`
     /// index (which duplicates every node's ~64-byte value just to serve an
     /// occasional click). Cost is O(depth × fan-out of each level), which on
-    /// a real filesystem tree is a handful of string compares — negligible
+    /// a real filesystem tree is a handful of string compares - negligible
     /// at UI-selection frequency.
     ///
     /// `path` must be `self.path` or nested under it, as produced by this

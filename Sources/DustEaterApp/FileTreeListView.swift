@@ -24,7 +24,7 @@ struct FileTreeListView: View {
 }
 
 private extension FileNode {
-    /// Sorted lazily, one directory level at a time — `OutlineGroup` only
+    /// Sorted lazily, one directory level at a time - `OutlineGroup` only
     /// evaluates this for nodes it's actually displaying (visible rows, plus
     /// whatever's needed to know if a collapsed row is expandable), so this
     /// never sorts more of the tree than what's on screen.

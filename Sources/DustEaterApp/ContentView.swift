@@ -10,7 +10,7 @@ struct ContentView: View {
     @State private var isOnHome = true
     @State private var totalDiskSize: Int64 = 0
     // Plain reference type held for stable identity across body
-    // re-evaluations (same pattern as `coordinator` above) — its internal
+    // re-evaluations (same pattern as `coordinator` above) - its internal
     // cache writes are not `@State`, so they're invisible to SwiftUI's
     // dependency tracking and don't trigger re-renders or risk the
     // "modifying state during view update" hazard a `@State`-backed cache
@@ -113,8 +113,8 @@ struct ContentView: View {
 
 /// Memoized squarified-treemap layout, keyed on which node is displayed and
 /// at what size. `treemapRects(for:)` used to redo the full sort + `YMTreeMap`
-/// tessellation on *every* `MainContentView` body evaluation — including ones
-/// triggered by something as unrelated as a sidebar selection change — even
+/// tessellation on *every* `MainContentView` body evaluation - including ones
+/// triggered by something as unrelated as a sidebar selection change - even
 /// though the layout only actually changes when the displayed node or the
 /// available size changes. A plain (non-`Observable`) class rather than
 /// `@State` itself: its cache writes are invisible to SwiftUI's dependency
@@ -139,7 +139,7 @@ final class TreemapCache {
         }
 
         // Sorting is scoped to this one node's immediate children, not the
-        // whole tree, so it's cheap enough to redo on every cache miss —
+        // whole tree, so it's cheap enough to redo on every cache miss -
         // no need to precompute a sorted copy of the entire scan up front.
         let children = displayNode.children.sorted { $0.size > $1.size }
         let computed: [TreemapRect]
@@ -152,7 +152,7 @@ final class TreemapCache {
             let cgRects = treeMap.tessellate(inRect: bounds)
 
             // Every rect here is a direct child of `displayNode`, so they
-            // all share the same depth relative to it — resolve it once
+            // all share the same depth relative to it - resolve it once
             // rather than re-deriving it (a string prefix-strip + full scan
             // for "/" characters) per rect, per redraw.
             let depth = children.first.map {
@@ -170,7 +170,7 @@ final class TreemapCache {
         return computed
     }
 
-    /// Called when a new scan starts. Necessary — not just tidy — because
+    /// Called when a new scan starts. Necessary - not just tidy - because
     /// the cache key doesn't include scan identity: re-scanning the exact
     /// same path at the exact same window size would otherwise match the
     /// previous scan's cache entry and silently serve stale rects.
@@ -417,7 +417,7 @@ struct MainContentView: View {
                 }
 
                 ToolbarItem(placement: .primaryAction) {
-                    // Informational only — no action. Built the same way as
+                    // Informational only - no action. Built the same way as
                     // the Home button (Label, not a bare Image) so it picks
                     // up the same toolbar icon-button sizing/chrome as the
                     // other items instead of a mismatched, boxier one.
