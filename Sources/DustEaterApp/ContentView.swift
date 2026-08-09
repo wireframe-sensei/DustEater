@@ -417,9 +417,15 @@ struct MainContentView: View {
                 }
 
                 ToolbarItem(placement: .primaryAction) {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                        .help("Folder sizes are approximate. Hard-linked files and deduplication mean the sum will exceed actual disk usage. True usage is shown on home screen.")
+                    // Informational only — no action. Built the same way as
+                    // the Home button (Label, not a bare Image) so it picks
+                    // up the same toolbar icon-button sizing/chrome as the
+                    // other items instead of a mismatched, boxier one.
+                    Button {
+                    } label: {
+                        Label("Info", systemImage: "info.circle")
+                    }
+                    .help("Folder sizes are approximate. Hard-linked files and deduplication mean the sum will exceed actual disk usage. True usage is shown on home screen.")
                 }
             }
         }
