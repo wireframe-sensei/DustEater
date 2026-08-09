@@ -70,7 +70,7 @@ struct FileDetailsView: View {
                     VStack(alignment: .center, spacing: DustEaterTheme.Spacing.md) {
                         Image(systemName: fileTypeIcon)
                             .font(.system(size: 48))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(Color.accentColor)
 
                         VStack(alignment: .center, spacing: DustEaterTheme.Spacing.sm) {
                             Text(node.name)
@@ -107,7 +107,7 @@ struct FileDetailsView: View {
                                 .textCase(.uppercase)
 
                             Text(filePath)
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(.callout.monospaced())
                                 .foregroundStyle(.primary)
                                 .lineLimit(5)
                                 .textSelection(.enabled)

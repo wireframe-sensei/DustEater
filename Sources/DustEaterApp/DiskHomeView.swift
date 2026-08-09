@@ -26,16 +26,9 @@ struct DiskHomeView: View {
 
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.08, green: 0.08, blue: 0.1),
-                    Color(red: 0.1, green: 0.1, blue: 0.12)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Background
+            Color(nsColor: .windowBackgroundColor)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Header section with glass panel
@@ -43,13 +36,13 @@ struct DiskHomeView: View {
                     VStack(spacing: 12) {
                         Image(systemName: "internaldrive")
                             .font(.system(size: 48, weight: .light))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(Color.accentColor)
 
                         VStack(spacing: 6) {
                             Text("Disk Analyzer")
-                                .font(.system(size: 28, weight: .semibold, design: .default))
+                                .font(.largeTitle.bold())
                             Text("Choose a disk or folder to analyze")
-                                .font(.system(size: 15, weight: .regular, design: .default))
+                                .font(.title3)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -59,13 +52,13 @@ struct DiskHomeView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "info.circle.fill")
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(Color.accentColor)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("About disk usage")
-                                    .font(.system(size: 13, weight: .semibold, design: .default))
+                                    .font(.headline)
                                 Text("Folder sizes may differ slightly due to APFS snapshots and system overhead")
-                                    .font(.system(size: 12, weight: .regular, design: .default))
+                                    .font(.callout)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -83,11 +76,11 @@ struct DiskHomeView: View {
                 if disks.isEmpty {
                     VStack(spacing: 12) {
                         ProgressView()
-                            .scaleEffect(1.3)
                         Text("Loading disks...")
                             .foregroundStyle(.secondary)
-                            .font(.system(size: 14, weight: .regular))
+                            .font(.body)
                     }
+                    .controlSize(.large)
                     .frame(maxHeight: .infinity)
                 } else {
                     ScrollView {
@@ -103,34 +96,9 @@ struct DiskHomeView: View {
                                     }
                                 }
 
-                                // Custom folder card
-                                Button {
-                                    onSelectCustomFolder()
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 16) {
-                                        Image(systemName: "folder.circle.fill")
-                                            .font(.system(size: 40))
-                                            .foregroundStyle(.blue.opacity(0.8))
-
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Browse Custom Folder")
-                                                .font(.system(size: 15, weight: .semibold, design: .default))
-                                                .foregroundStyle(.primary)
-                                            Text("Select any folder")
-                                                .font(.system(size: 12, weight: .regular, design: .default))
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        Spacer()
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .frame(minHeight: 160)
-                                    .padding(16)
-                                    .background(.ultraThinMaterial)
-                                    .cornerRadius(14)
-                                }
-                                .buttonStyle(.plain)
-                                .pointingHandCursor()
+                                CustomFolderCardView(onTap: onSelectCustomFolder)
                             }
+                            .controlSize(.extraLarge)
                             .padding(20)
                         }
                     }
@@ -191,10 +159,52 @@ struct DiskHomeView: View {
     }
 }
 
+/// A custom-drawn card, not a system button style — it draws its own
+/// background rather than delegating to `.borderedProminent`/`.bordered`,
+/// so unlike those it has to read its corner radius from `ControlMetrics`
+/// itself. Deliberately reads `cornerRadius` only, not `isCapsule`: this is
+/// a wide card, not a compact pill button, so it should never collapse into
+/// a capsule the way a real Large/XL button would.
+struct CustomFolderCardView: View {
+    let onTap: () -> Void
+    @Environment(\.controlMetrics) private var metrics
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 16) {
+                Image(systemName: "folder.circle.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.accentColor.opacity(0.8))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Browse Custom Folder")
+                        .font(.control)
+                        .foregroundStyle(.primary)
+                    Text("Select any folder")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 160)
+            .padding(16)
+            .background(.ultraThinMaterial)
+            .cornerRadius(metrics.cornerRadius)
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+    }
+}
+
+// See `CustomFolderCardView` above — same reasoning: a custom-drawn card,
+// so it reads its own corner radius from `ControlMetrics.cornerRadius`
+// rather than `isCapsule`.
 struct DiskCardView: View {
     let disk: DiskInfo
     let onTap: () -> Void
     @State private var isHovered = false
+    @Environment(\.controlMetrics) private var metrics
 
     var body: some View {
         Button(action: onTap) {
@@ -203,17 +213,17 @@ struct DiskCardView: View {
                 HStack {
                     Image(systemName: "internaldrive.fill")
                         .font(.system(size: 32, weight: .semibold))
-                        .foregroundStyle(.blue.opacity(0.8))
+                        .foregroundStyle(Color.accentColor.opacity(0.8))
                     Spacer()
                 }
 
                 // Disk info
                 VStack(alignment: .leading, spacing: 3) {
                     Text(disk.name)
-                        .font(.system(size: 15, weight: .semibold, design: .default))
+                        .font(.control)
                         .foregroundStyle(.primary)
                     Text(disk.path)
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -226,22 +236,22 @@ struct DiskCardView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ByteFormatter.string(fromBytes: disk.usedSize))
-                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                .font(.body.weight(.semibold).monospaced())
                                 .foregroundStyle(.primary)
                             Text("of \(ByteFormatter.string(fromBytes: disk.totalSize))")
-                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .font(.subheadline.monospaced())
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Text("\(String(format: "%.0f", disk.usagePercentage))%")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(.body.weight(.semibold).monospaced())
                             .foregroundStyle(usageColor)
                     }
 
                     // Progress bar
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.white.opacity(0.1))
+                            .fill(Color(nsColor: .quaternaryLabelColor))
 
                         RoundedRectangle(cornerRadius: 4)
                             .fill(usageColor)
@@ -255,7 +265,7 @@ struct DiskCardView: View {
             .frame(minHeight: 160)
             .padding(16)
             .background(.ultraThinMaterial)
-            .cornerRadius(14)
+            .cornerRadius(metrics.cornerRadius)
             .foregroundStyle(.primary)
             .opacity(isHovered ? 0.9 : 1.0)
         }
@@ -278,11 +288,11 @@ struct DiskCardView: View {
     private var usageColor: Color {
         let percentage = disk.usagePercentage
         if percentage > 80 {
-            return Color(red: 1.0, green: 0.27, blue: 0.23) // #FF453A - macOS red
+            return Color(nsColor: .systemRed)
         } else if percentage > 60 {
-            return Color(red: 1.0, green: 0.8, blue: 0.0) // #FFD60A - macOS yellow
+            return Color(nsColor: .systemYellow)
         } else {
-            return Color(red: 0.3, green: 0.84, blue: 0.4) // #34C759 - macOS green
+            return Color(nsColor: .systemGreen)
         }
     }
 }

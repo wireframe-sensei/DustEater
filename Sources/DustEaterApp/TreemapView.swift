@@ -4,20 +4,39 @@ import DustEaterCore
 
 struct TreemapView: View {
     let rects: [TreemapRect]
-    let rootPath: String
     let onSelectNode: (FileNode) -> Void
-    let theme: ColorTheme
     @State private var hoveredId: String?
-    @State private var previousHoveredId: String?
     @State private var mouseLocation: CGPoint = .zero
     @State private var showTooltip = false
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    /// The hover highlight is this view's only accent-colored "this is the
+    /// current selection" indicator, so it's the one that needs to track
+    /// window focus — same as a table's selected-row highlight desaturating
+    /// to gray the moment the window isn't key, instead of staying accent-
+    /// colored while the app is in the background.
+    private var highlightColor: Color {
+        controlActiveState == .key ? Color.accentColor : Color(nsColor: .systemGray)
+    }
+
+    /// Rects large enough to carry a label, precomputed once per body
+    /// evaluation rather than filtered inside `ForEach`'s content closure —
+    /// so `ForEach` only ever diffs identities for rects that actually
+    /// render something, instead of creating and immediately discarding a
+    /// view per rect that's too small to label.
+    private var labeledRects: [TreemapRect] {
+        rects.filter { min($0.frame.width, $0.frame.height) > 60 }
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            // Canvas for rectangles
+            // Base layer: every rect's resting-state fill/stroke, using each
+            // rect's precomputed `color`. Deliberately doesn't read
+            // `hoveredId` — moving the mouse across tiles must not
+            // invalidate and re-run this full-level draw loop.
             Canvas { context, size in
                 for rect in rects {
-                    drawRect(rect, isHovered: rect.id == hoveredId, in: &context)
+                    drawRect(rect, in: &context)
                 }
             }
             .background(Color(nsColor: .controlBackgroundColor))
@@ -35,7 +54,6 @@ struct TreemapView: View {
 
                     // Only trigger animation when tile changes
                     if newHoveredId != hoveredId {
-                        previousHoveredId = hoveredId
                         hoveredId = newHoveredId
 
                         if newHoveredId != nil {
@@ -59,35 +77,44 @@ struct TreemapView: View {
                 }
             }
 
-            // Text labels overlay for larger rectangles
-            ForEach(rects, id: \.id) { rect in
-                let minDim = min(rect.frame.width, rect.frame.height)
-                if minDim > 60 {  // Only show text for large enough rectangles
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(rect.node.name)
-                            .font(.system(size: minDim > 120 ? 12 : 10, weight: .semibold, design: .default))
-                            .lineLimit(2)
-                            .truncationMode(.tail)
-
-                        if minDim > 100 {
-                            Text(ByteFormatter.string(fromBytes: rect.node.size))
-                                .font(.system(size: 9, weight: .regular, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .frame(maxWidth: rect.frame.width - 8, alignment: .topLeading)
-                    .position(x: rect.frame.midX, y: rect.frame.midY)
+            // Hover highlight: a separate, tiny draw scoped to just the
+            // hovered rect, so mouse movement only ever costs redrawing one
+            // rect instead of the whole level (which the base Canvas above
+            // is now shielded from by not depending on `hoveredId` at all).
+            if let hoveredId, let hovered = rects.first(where: { $0.id == hoveredId }) {
+                Canvas { context, _ in
+                    drawHoverHighlight(hovered, in: &context)
                 }
+                .allowsHitTesting(false)
+            }
+
+            // Text labels overlay for larger rectangles
+            ForEach(labeledRects, id: \.id) { rect in
+                let minDim = min(rect.frame.width, rect.frame.height)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(rect.node.name)
+                        .font((minDim > 120 ? Font.callout : Font.caption).weight(.semibold))
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+
+                    if minDim > 100 {
+                        Text(ByteFormatter.string(fromBytes: rect.node.size))
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .foregroundStyle(.white)
+                .padding(4)
+                .frame(maxWidth: rect.frame.width - 8, alignment: .topLeading)
+                .position(x: rect.frame.midX, y: rect.frame.midY)
             }
 
             // Tooltip for hovered item with smooth animation
             if showTooltip, let hoveredId, let hovered = rects.first(where: { $0.id == hoveredId }) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(hovered.node.name)
-                        .font(.system(size: 14, weight: .semibold, design: .default))
+                        .font(.body.weight(.semibold))
                         .lineLimit(1)
 
                     Divider()
@@ -99,7 +126,7 @@ struct TreemapView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                             Text(ByteFormatter.string(fromBytes: hovered.node.size))
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(.callout.monospaced())
                                 .foregroundStyle(.secondary)
                         }
 
@@ -109,7 +136,7 @@ struct TreemapView: View {
                                     .font(.system(size: 9))
                                     .foregroundStyle(.secondary)
                                 Text("\(hovered.node.itemCount) items")
-                                    .font(.system(size: 11, design: .default))
+                                    .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -117,7 +144,7 @@ struct TreemapView: View {
                 }
                 .padding(10)
                 .frame(width: 200, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(.regularMaterial)
                 .cornerRadius(10)
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
                 .offset(x: 20, y: -50)
@@ -127,39 +154,23 @@ struct TreemapView: View {
         }
     }
 
-    private func drawRect(_ rect: TreemapRect, isHovered: Bool, in context: inout GraphicsContext) {
-        let depth = TreemapColors.depth(fromPath: rect.node.path, relativeTo: rootPath)
-        let baseColor = TreemapColors.colorForNode(rect.node, depth: depth, theme: theme)
+    /// Resting-state draw. Uses the rect's precomputed `color` — no per-call
+    /// depth/theme lookup — since this runs once per rect on every base
+    /// `Canvas` redraw.
+    private func drawRect(_ rect: TreemapRect, in context: inout GraphicsContext) {
+        let path = Path(roundedRect: rect.frame, cornerRadius: 1)
+        context.fill(path, with: .color(rect.color.opacity(0.85)))
+        context.stroke(path, with: .color(Color(nsColor: .separatorColor)), lineWidth: 0.5)
+    }
 
-        // Apple-inspired subtle colors with depth
-        let fillColor: Color
-        if isHovered {
-            fillColor = baseColor.opacity(0.95)
-        } else {
-            fillColor = baseColor.opacity(0.85)
-        }
+    /// Hovered-state draw, used only by the small overlay `Canvas` scoped to
+    /// the single currently-hovered rect.
+    private func drawHoverHighlight(_ rect: TreemapRect, in context: inout GraphicsContext) {
+        let shadowPath = Path(roundedRect: rect.frame.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 1)
+        context.fill(shadowPath, with: .color(.black.opacity(0.1)))
 
-        let strokeColor: Color = isHovered
-            ? Color.black.opacity(0.3)
-            : Color.black.opacity(0.08)
-
-        let lineWidth: CGFloat = isHovered ? 1.2 : 0.5
-
-        // Draw shadow for depth (subtle)
-        if isHovered {
-            let shadowPath = Path(
-                roundedRect: rect.frame.insetBy(dx: 0.5, dy: 0.5),
-                cornerRadius: 1
-            )
-            context.fill(shadowPath, with: .color(.black.opacity(0.1)))
-        }
-
-        // Draw main rectangle
-        let path = Path(
-            roundedRect: rect.frame,
-            cornerRadius: 1
-        )
-        context.fill(path, with: .color(fillColor))
-        context.stroke(path, with: .color(strokeColor), lineWidth: lineWidth)
+        let path = Path(roundedRect: rect.frame, cornerRadius: 1)
+        context.fill(path, with: .color(rect.color.opacity(0.95)))
+        context.stroke(path, with: .color(highlightColor.opacity(0.6)), lineWidth: 1.2)
     }
 }

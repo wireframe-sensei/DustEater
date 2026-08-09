@@ -29,12 +29,15 @@ enum DustEaterTheme {
     }
 
     // MARK: - Typography
+    // Content text — titles, descriptions, data values. Interface chrome
+    // (buttons, menus, toolbars, sidebar/table rows) uses `Font.control`
+    // instead, defined in MacOSDesignTokens.swift.
     enum Typography {
-        static let title1 = Font.system(size: 28, weight: .bold)
-        static let title2 = Font.system(size: 22, weight: .bold)
-        static let title3 = Font.system(size: 20, weight: .semibold)
-        static let headline = Font.system(size: 17, weight: .semibold)
-        static let body = Font.system(size: 13, weight: .regular)
-        static let caption = Font.system(size: 11, weight: .regular)
+        static let title1 = Font.largeTitle.bold()
+        static let title2 = Font.title.bold()
+        static let title3 = Font.title3.weight(.semibold)
+        static let headline = Font.headline
+        static let body = Font.body
+        static let caption = Font.caption
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Reports incremental progress while a scan is in-flight.
 public struct ScanProgress: Sendable {
@@ -30,7 +31,24 @@ public struct ScanProgress: Sendable {
 public actor DiskScanner {
     private var itemsScanned = 0
     private var bytesScanned: Int64 = 0
-    private var seenInodes: Set<UInt64> = []
+    /// Guarded by a raw lock rather than actor isolation: dedup is checked
+    /// once per *file* (not per directory), so it sits on the hottest path
+    /// in the whole scan. Actor isolation would force every one of those
+    /// checks — across every concurrently-running directory task — to funnel
+    /// through this actor's single serial executor, capping the CPU-bound
+    /// part of the scan (as opposed to the I/O, which genuinely parallelizes
+    /// via `BlockingIO`) to one core. `OSAllocatedUnfairLock` is a plain
+    /// spinlock/futex with none of an actor hop's job-scheduling overhead,
+    /// so contention here stays cheap even at high fan-out.
+    private let seenInodes = OSAllocatedUnfairLock<Set<UInt64>>(initialState: [])
+    private var lastProgressEmitNanos: UInt64 = 0
+    /// Throttled here, inside the actor, rather than after crossing to the
+    /// main thread: `onEntries` fires once per directory, which can be
+    /// hundreds of thousands of times on a large tree. Checking the interval
+    /// before ever invoking the handler avoids scheduling that many
+    /// `DispatchQueue.main.async` blocks just to have almost all of them
+    /// no-op once they land.
+    private let progressIntervalNanos: UInt64 = 100_000_000
 
     public init() {}
 
@@ -42,10 +60,11 @@ public actor DiskScanner {
         onProgress: (@Sendable (ScanProgress) -> Void)? = nil
     ) async -> FileNode {
         let name = (rootPath as NSString).lastPathComponent
-        seenInodes.removeAll()
-        return await scanDirectory(
+        seenInodes.withLock { $0.removeAll() }
+        return await Self.scanDirectory(
             path: rootPath,
             name: name,
+            seenInodes: seenInodes,
             onEntries: { [weak self] items, bytes, path in
                 await self?.reportProgress(addedItems: items, addedBytes: bytes, path: path, handler: onProgress)
             }
@@ -60,6 +79,11 @@ public actor DiskScanner {
     ) {
         itemsScanned += addedItems
         bytesScanned += addedBytes
+
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard now - lastProgressEmitNanos > progressIntervalNanos else { return }
+        lastProgressEmitNanos = now
+
         handler?(ScanProgress(itemsScanned: itemsScanned, bytesScanned: bytesScanned, currentPath: path))
     }
 
@@ -67,9 +91,16 @@ public actor DiskScanner {
     /// subdirectory is scanned in its own child task, and results are
     /// folded together as they complete. Uses inode tracking to deduplicate
     /// hard-linked files so they're only counted once.
-    private func scanDirectory(
+    ///
+    /// `static`, not an instance method — this keeps the CPU-bound tree
+    /// construction (as opposed to `reportProgress`'s bookkeeping) off the
+    /// actor's serial executor entirely, so sibling directory tasks in the
+    /// `TaskGroup` below can genuinely run concurrently instead of each
+    /// needing to acquire `self`'s isolation just to build a `FileNode`.
+    private static func scanDirectory(
         path: String,
         name: String,
+        seenInodes: OSAllocatedUnfairLock<Set<UInt64>>,
         onEntries: @escaping @Sendable (Int, Int64, String) async -> Void
     ) async -> FileNode {
         let entries: [RawDirEntry]
@@ -92,9 +123,8 @@ public actor DiskScanner {
                 subdirEntries.append(entry)
             } else {
                 // Only count each inode once (deduplicate hard links)
-                let shouldCount = !seenInodes.contains(entry.inode)
-                if shouldCount {
-                    seenInodes.insert(entry.inode)
+                let shouldCount = seenInodes.withLock { inodes in
+                    inodes.insert(entry.inode).inserted
                 }
 
                 let countedSize = shouldCount ? entry.allocSize : 0
@@ -135,7 +165,7 @@ public actor DiskScanner {
                 childPath.append("/")
                 childPath.append(entry.name)
                 group.addTask {
-                    await self.scanDirectory(path: childPath, name: entry.name, onEntries: onEntries)
+                    await Self.scanDirectory(path: childPath, name: entry.name, seenInodes: seenInodes, onEntries: onEntries)
                 }
             }
             for await child in group {

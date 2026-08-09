@@ -1,4 +1,5 @@
 import Darwin
+import os
 
 /// One raw entry returned by a single `getattrlistbulk` call, before we've
 /// decided what to do with it (recurse, sum, skip).
@@ -26,6 +27,39 @@ enum AttrListError: Error, CustomStringConvertible {
     }
 }
 
+/// A small free-list of reusable `getattrlistbulk` buffers.
+///
+/// `listDirectory` is called once per directory — hundreds of thousands of
+/// times on a large tree — and each call used to allocate *and zero-fill* a
+/// fresh 64 KiB buffer, even though `getattrlistbulk` immediately overwrites
+/// whatever portion it uses and the parsing loop below never reads past what
+/// the kernel actually wrote. Pooling avoids that per-call alloc + zero.
+/// `BlockingIO`'s semaphore already bounds how many callers run at once, so
+/// this pool's size is implicitly bounded by the same limit — it just never
+/// shrinks back down, trading a small amount of steady-state memory for
+/// avoiding repeated allocation churn.
+private final class BufferPool: Sendable {
+    private let lock: OSAllocatedUnfairLock<[[UInt8]]>
+    let bufferSize: Int
+
+    init(bufferSize: Int) {
+        self.bufferSize = bufferSize
+        self.lock = OSAllocatedUnfairLock(initialState: [])
+    }
+
+    func borrow() -> [UInt8] {
+        lock.withLock { pool in
+            pool.popLast()
+        } ?? [UInt8](repeating: 0, count: bufferSize)
+    }
+
+    func giveBack(_ buffer: [UInt8]) {
+        lock.withLock { pool in
+            pool.append(buffer)
+        }
+    }
+}
+
 /// Low-level wrapper around the `getattrlistbulk(2)` syscall.
 ///
 /// This batch-fetches directory entries and their metadata (name, object
@@ -33,6 +67,7 @@ enum AttrListError: Error, CustomStringConvertible {
 /// which is dramatically faster than `FileManager`'s enumerator or `stat`-ing
 /// each entry individually, because it avoids one syscall round-trip per file.
 enum AttrListBulkReader {
+    private static let bufferPool = BufferPool(bufferSize: 1 << 16) // 64 KiB, large enough to batch hundreds of entries
 
     /// Attempts to open `path` without reading its contents, purely to
     /// distinguish *why* a root scan target is inaccessible: nonexistent
@@ -71,8 +106,9 @@ enum AttrListBulkReader {
             | attrgroup_t(ATTR_CMN_FILEID)
         attrList.fileattr = attrgroup_t(ATTR_FILE_ALLOCSIZE)
 
-        let bufferSize = 1 << 16 // 64 KiB, large enough to batch hundreds of entries
-        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        let bufferSize = bufferPool.bufferSize
+        var buffer = bufferPool.borrow()
+        defer { bufferPool.giveBack(buffer) }
         var results: [RawDirEntry] = []
         results.reserveCapacity(256)
 

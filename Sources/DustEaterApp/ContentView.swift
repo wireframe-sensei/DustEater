@@ -6,52 +6,21 @@ struct ContentView: View {
     @State private var coordinator = ScanCoordinator()
     @State private var selectedPath: String?
     @State private var showSidebar = true
-    @State private var sortedRoot: FileNode?
-    @State private var isSortingInProgress = false
     @State private var selectedTheme: ColorTheme = .weighted
     @State private var isOnHome = true
     @State private var totalDiskSize: Int64 = 0
-
-    private var selectedNode: FileNode? {
-        guard let selectedPath, case .finished(let root) = coordinator.state else { return nil }
-        return root.find(path: selectedPath)
-    }
+    // Plain reference type held for stable identity across body
+    // re-evaluations (same pattern as `coordinator` above) — its internal
+    // cache writes are not `@State`, so they're invisible to SwiftUI's
+    // dependency tracking and don't trigger re-renders or risk the
+    // "modifying state during view update" hazard a `@State`-backed cache
+    // would.
+    @State private var treemapCache = TreemapCache()
 
     private func treemapRects(for size: CGSize) -> [TreemapRect] {
         guard case .finished(let root) = coordinator.state else { return [] }
-
-        // Queue async sort if not already done, but don't block on it
-        if sortedRoot == nil && !isSortingInProgress {
-            print("📊 Starting background sort...")
-            isSortingInProgress = true
-            let sortStart = DispatchTime.now()
-            Task.detached(priority: .userInitiated) {
-                let sorted = root.sortedBySize()
-                let sortElapsed = Double(DispatchTime.now().uptimeNanoseconds - sortStart.uptimeNanoseconds) / 1_000_000_000
-                print("📊 Background sort completed: \(String(format: "%.3f", sortElapsed))s")
-                await MainActor.run { [self] in
-                    self.sortedRoot = sorted
-                    self.isSortingInProgress = false
-                }
-            }
-        }
-
-        let baseNode = sortedRoot ?? root
-        let displayNode = coordinator.zoomNode ?? baseNode
-
-        // Use YMTreeMap for treemap layout
-        let children = displayNode.children
-        guard !children.isEmpty else { return [] }
-
-        let sizes = children.map { Double($0.size) }
-        let treeMap = YMTreeMap(withValues: sizes)
-        let bounds = CGRect(x: 0, y: 0, width: size.width, height: size.height)
-        let cgRects = treeMap.tessellate(inRect: bounds)
-
-        // Map YMTreeMap results back to TreemapRects with FileNodes
-        return zip(children, cgRects).map { child, cgRect in
-            TreemapRect(node: child, frame: cgRect)
-        }
+        let displayNode = coordinator.zoomNode ?? root
+        return treemapCache.rects(for: displayNode, size: size, theme: selectedTheme)
     }
 
     var body: some View {
@@ -70,10 +39,10 @@ struct ContentView: View {
                 case .idle:
                     VStack(spacing: 16) {
                         ProgressView()
-                            .scaleEffect(1.2)
                         Text("Preparing scan...")
                             .foregroundStyle(.secondary)
                     }
+                    .controlSize(.large)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .scanning(let progress):
                     ScanningStateView(progress: progress, totalDiskSize: totalDiskSize, onCancel: {
@@ -83,7 +52,6 @@ struct ContentView: View {
                 case .finished(let root):
                     MainContentView(
                         root: root,
-                        sortedRoot: sortedRoot,
                         selectedPath: $selectedPath,
                         coordinator: coordinator,
                         treemapRects: treemapRects(for:),
@@ -91,8 +59,6 @@ struct ContentView: View {
                         selectedTheme: $selectedTheme,
                         onBackToHome: {
                             isOnHome = true
-                            sortedRoot = nil
-                            isSortingInProgress = false
                             selectedPath = nil
                         }
                     )
@@ -110,8 +76,6 @@ struct ContentView: View {
         isOnHome = false
         selectedPath = nil
         coordinator.zoomNode = nil
-        sortedRoot = nil
-        isSortingInProgress = false
 
         // Get total disk size
         let url = URL(fileURLWithPath: path)
@@ -120,6 +84,7 @@ struct ContentView: View {
             totalDiskSize = Int64(totalCapacity)
         }
 
+        treemapCache.invalidate()
         coordinator.startScan(path: path)
     }
 
@@ -135,8 +100,6 @@ struct ContentView: View {
         isOnHome = false
         selectedPath = nil
         coordinator.zoomNode = nil
-        sortedRoot = nil
-        isSortingInProgress = false
 
         // Get total disk size
         if let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]),
@@ -144,7 +107,77 @@ struct ContentView: View {
             totalDiskSize = Int64(totalCapacity)
         }
 
+        treemapCache.invalidate()
         coordinator.startScan(path: url.path)
+    }
+}
+
+/// Memoized squarified-treemap layout, keyed on which node is displayed and
+/// at what size. `treemapRects(for:)` used to redo the full sort + `YMTreeMap`
+/// tessellation on *every* `MainContentView` body evaluation — including ones
+/// triggered by something as unrelated as a sidebar selection change — even
+/// though the layout only actually changes when the displayed node or the
+/// available size changes. A plain (non-`Observable`) class rather than
+/// `@State` itself: its cache writes are invisible to SwiftUI's dependency
+/// tracking, so they can't trigger the "modifying state during view update"
+/// hazard a `@State`-backed cache would risk when written from inside a
+/// `GeometryReader` closure.
+final class TreemapCache {
+    private struct Key: Equatable {
+        let path: String
+        let size: CGSize
+        let childCount: Int
+        let theme: ColorTheme
+    }
+
+    private var key: Key?
+    private var cachedRects: [TreemapRect] = []
+
+    func rects(for displayNode: FileNode, size: CGSize, theme: ColorTheme) -> [TreemapRect] {
+        let requestedKey = Key(path: displayNode.path, size: size, childCount: displayNode.children.count, theme: theme)
+        if key == requestedKey {
+            return cachedRects
+        }
+
+        // Sorting is scoped to this one node's immediate children, not the
+        // whole tree, so it's cheap enough to redo on every cache miss —
+        // no need to precompute a sorted copy of the entire scan up front.
+        let children = displayNode.children.sorted { $0.size > $1.size }
+        let computed: [TreemapRect]
+        if children.isEmpty {
+            computed = []
+        } else {
+            let sizes = children.map { Double($0.size) }
+            let treeMap = YMTreeMap(withValues: sizes)
+            let bounds = CGRect(origin: .zero, size: size)
+            let cgRects = treeMap.tessellate(inRect: bounds)
+
+            // Every rect here is a direct child of `displayNode`, so they
+            // all share the same depth relative to it — resolve it once
+            // rather than re-deriving it (a string prefix-strip + full scan
+            // for "/" characters) per rect, per redraw.
+            let depth = children.first.map {
+                TreemapColors.depth(fromPath: $0.path, relativeTo: displayNode.path)
+            } ?? 0
+
+            computed = zip(children, cgRects).map { child, cgRect in
+                let color = TreemapColors.colorForNode(child, depth: depth, theme: theme)
+                return TreemapRect(node: child, frame: cgRect, color: color)
+            }
+        }
+
+        key = requestedKey
+        cachedRects = computed
+        return computed
+    }
+
+    /// Called when a new scan starts. Necessary — not just tidy — because
+    /// the cache key doesn't include scan identity: re-scanning the exact
+    /// same path at the exact same window size would otherwise match the
+    /// previous scan's cache entry and silently serve stale rects.
+    func invalidate() {
+        key = nil
+        cachedRects = []
     }
 }
 
@@ -156,7 +189,7 @@ struct IdleStateView: View {
         VStack(spacing: DustEaterTheme.Spacing.xl) {
             Image(systemName: "folder.badge.magnifyingglass")
                 .font(.system(size: 64))
-                .foregroundStyle(.blue.opacity(0.6))
+                .foregroundStyle(Color.accentColor.opacity(0.6))
 
             VStack(spacing: DustEaterTheme.Spacing.md) {
                 Text("Analyze Disk Usage")
@@ -172,11 +205,11 @@ struct IdleStateView: View {
                 onChooseFolder()
             } label: {
                 Label("Choose Folder", systemImage: "folder.badge.plus")
-                    .font(DustEaterTheme.Typography.headline)
-                    .frame(width: 200, height: 44)
+                    .font(.control)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.blue)
+            .tint(Color.accentColor)
+            .controlSize(.large)
 
             VStack(spacing: DustEaterTheme.Spacing.sm) {
                 Text("Keyboard shortcut: ⌘O")
@@ -204,15 +237,8 @@ struct ScanningStateView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.08, green: 0.08, blue: 0.1),
-                    Color(red: 0.1, green: 0.1, blue: 0.12)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            Color(nsColor: .windowBackgroundColor)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer()
@@ -220,7 +246,7 @@ struct ScanningStateView: View {
                 ZStack {
                     // Doughnut progress ring background
                     Circle()
-                        .stroke(Color.white.opacity(0.1), lineWidth: 12)
+                        .stroke(Color(nsColor: .quaternaryLabelColor), lineWidth: 12)
                         .frame(width: 280, height: 280)
 
                     // Doughnut progress ring (animated to progress)
@@ -228,7 +254,7 @@ struct ScanningStateView: View {
                         .trim(from: 0, to: progressRatio)
                         .stroke(
                             LinearGradient(
-                                gradient: Gradient(colors: [.blue, .blue.opacity(0.6)]),
+                                gradient: Gradient(colors: [Color.accentColor, Color.accentColor.opacity(0.6)]),
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -241,19 +267,18 @@ struct ScanningStateView: View {
                     // Center content
                     VStack(spacing: DustEaterTheme.Spacing.md) {
                         ProgressView()
-                            .scaleEffect(1.3)
 
                         VStack(spacing: 8) {
                             Text("\(progress.itemsScanned) items scanned")
-                                .font(.system(size: 15, weight: .semibold, design: .default))
+                                .font(.title3.weight(.semibold))
                                 .foregroundStyle(.primary)
 
                             Text(ByteFormatter.string(fromBytes: progress.bytesScanned))
-                                .font(.system(size: 18, weight: .semibold, design: .default))
-                                .foregroundStyle(.blue)
+                                .font(.title2.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
 
                             Text(progress.currentPath)
-                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .font(.callout.monospaced())
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -266,9 +291,11 @@ struct ScanningStateView: View {
                 Spacer()
 
                 Button("Cancel", action: onCancel)
+                    .font(.control)
                     .buttonStyle(.bordered)
                     .padding(.bottom, DustEaterTheme.Spacing.lg)
             }
+            .controlSize(.large)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -301,7 +328,7 @@ struct PermissionBannerView: View {
                 }
             } label: {
                 Label("Open System Settings", systemImage: "gearshape")
-                    .font(DustEaterTheme.Typography.headline)
+                    .font(.control)
             }
             .buttonStyle(.borderedProminent)
             .tint(.orange)
@@ -340,7 +367,6 @@ struct ErrorStateView: View {
 // MARK: - Main Content
 struct MainContentView: View {
     let root: FileNode
-    let sortedRoot: FileNode?
     @Binding var selectedPath: String?
     let coordinator: ScanCoordinator
     let treemapRects: (CGSize) -> [TreemapRect]
@@ -348,13 +374,9 @@ struct MainContentView: View {
     @Binding var selectedTheme: ColorTheme
     let onBackToHome: () -> Void
 
-    private var displayRoot: FileNode {
-        sortedRoot ?? root
-    }
-
     private var selectedNode: FileNode? {
         guard let selectedPath else { return nil }
-        return displayRoot.find(path: selectedPath)
+        return root.node(atPath: selectedPath)
     }
 
     var body: some View {
@@ -388,7 +410,7 @@ struct MainContentView: View {
 
                 Divider()
 
-                FileTreeListView(root: displayRoot, selectedPath: $selectedPath) { node in
+                FileTreeListView(root: root, selectedPath: $selectedPath) { node in
                     // Only zoom into directories, not files
                     if node.isDirectory {
                         coordinator.zoomNode = node
@@ -397,7 +419,7 @@ struct MainContentView: View {
                 }
             }
             .frame(minWidth: 280, maxWidth: 350)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(.ultraThinMaterial)
 
             Divider()
 
@@ -449,6 +471,7 @@ struct MainContentView: View {
                                 } label: {
                                     HStack {
                                         Text(theme.displayName)
+                                            .font(.control)
                                         if theme == selectedTheme {
                                             Image(systemName: "checkmark")
                                         }
@@ -459,7 +482,7 @@ struct MainContentView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "paintpalette")
                                 Text(selectedTheme.displayName)
-                                    .font(.caption)
+                                    .font(.control)
                             }
                         }
                         .help("Change color theme")
@@ -471,7 +494,7 @@ struct MainContentView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "house")
                                 Text("Home")
-                                    .font(.caption)
+                                    .font(.control)
                             }
                         }
                         .help("Back to home screen")
@@ -492,30 +515,16 @@ struct MainContentView: View {
                     GeometryReader { geometry in
                         TreemapView(
                             rects: treemapRects(geometry.size),
-                            rootPath: (coordinator.zoomNode ?? root).path,
                             onSelectNode: { node in
                                 if node.isDirectory {
                                     coordinator.zoomNode = node
                                     selectedPath = node.path
                                 }
-                            },
-                            theme: selectedTheme
+                            }
                         )
                     }
                 }
             }
         }
-    }
-}
-
-private extension FileNode {
-    func find(path: String) -> FileNode? {
-        if self.path == path { return self }
-        for child in children {
-            if let found = child.find(path: path) {
-                return found
-            }
-        }
-        return nil
     }
 }

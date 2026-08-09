@@ -37,6 +37,8 @@ Read the one you need — do not try to hold all of it in context at once.
 | `references/sizing-tokens.md` | Sizing any control. 68 tokens across 5 size columns. |
 | `references/components.md` | Building a specific component — gives its exact variant axes. |
 | `references/materials-and-effects.md` | Any floating surface, shadow, blur, or Liquid Glass. |
+| `references/swift.md` | **Implementing in Swift. Read this first — it changes the rules.** |
+| `assets/MacOSDesignTokens.swift` | Swift: control metrics, glass params, non-system colors. |
 | `assets/tokens.css` | Implementing on web. Drop-in CSS custom properties, light + dark. |
 
 ## Non-negotiable rules
@@ -169,9 +171,13 @@ almost certainly already has it.
 properties. It ships light and dark, plus `[data-appearance]` hooks for explicit override.
 Set `-webkit-font-smoothing: antialiased`.
 
-**Implementing in SwiftUI or AppKit:** Prefer the real system controls, which already carry all
-of this. Use these tokens for custom controls and for verifying that what you built matches.
-`Color.accentColor` and the semantic `NSColor` values map directly onto the token names here.
+**Implementing in SwiftUI or AppKit:** Read `references/swift.md` before writing anything. The
+guidance genuinely inverts there: AppKit already implements most of this system, so the correct
+move is to use semantic `NSColor` values, `ControlSize`, `Material`, and system controls rather
+than the raw tokens. Hardcoding the extracted hex values produces an app that screenshots
+identically and behaves less natively — it breaks the user's accent choice, Increase Contrast,
+Reduce Transparency, and focus states. Use `assets/MacOSDesignTokens.swift` for the parts with
+no system equivalent: control metrics, Liquid Glass parameters, structural dimensions.
 
 **Reviewing existing UI:** Check in this order — type scale, label alpha values, control heights,
 corner radii, accent hardcoding, material vs. solid fills, focus state. That ordering finds the

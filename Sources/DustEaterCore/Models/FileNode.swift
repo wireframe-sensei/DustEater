@@ -7,7 +7,7 @@ import Foundation
 /// report disk usage (sparse files, compressed files, and filesystem block
 /// rounding are reflected accurately). For directories, `size` is the sum
 /// of all descendant allocated sizes.
-public struct FileNode: Sendable, Identifiable, Equatable, Hashable {
+public struct FileNode: Sendable, Identifiable {
     public var id: String { path }
 
     public let name: String
@@ -40,6 +40,24 @@ public struct FileNode: Sendable, Identifiable, Equatable, Hashable {
     }
 }
 
+extension FileNode: Equatable, Hashable {
+    /// Deliberately *not* synthesized: the compiler-generated `==`/`hash`
+    /// for a struct holding `children: [FileNode]` recurse into every
+    /// descendant, so a single comparison on a large scan's root would walk
+    /// the entire tree. `path` already uniquely identifies a node within a
+    /// given scan (it's `id`), so equality only needs `path` + `size` — no
+    /// caller here needs "and every descendant is byte-identical too" — and
+    /// hashing only `path` keeps that O(1) while still satisfying Hashable
+    /// (equal nodes necessarily share a `path`, so their hashes agree).
+    public static func == (lhs: FileNode, rhs: FileNode) -> Bool {
+        lhs.path == rhs.path && lhs.size == rhs.size
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(path)
+    }
+}
+
 extension FileNode {
     /// Returns a copy of this node with children sorted by size, descending.
     public func sortedBySize() -> FileNode {
@@ -48,5 +66,33 @@ extension FileNode {
             .map { $0.sortedBySize() }
             .sorted { $0.size > $1.size }
         return copy
+    }
+
+    /// Looks up a descendant by its full path, descending one path component
+    /// at a time and matching by `name` — rather than scanning the whole
+    /// tree (the old `find(path:)`) or maintaining a separate `path → node`
+    /// index (which duplicates every node's ~64-byte value just to serve an
+    /// occasional click). Cost is O(depth × fan-out of each level), which on
+    /// a real filesystem tree is a handful of string compares — negligible
+    /// at UI-selection frequency.
+    ///
+    /// `path` must be `self.path` or nested under it, as produced by this
+    /// same tree; returns `nil` if no such descendant exists.
+    public func node(atPath path: String) -> FileNode? {
+        guard path != self.path else { return self }
+        guard path.hasPrefix(self.path) else { return nil }
+
+        var relative = path.dropFirst(self.path.count)
+        if relative.first == "/" { relative = relative.dropFirst() }
+        guard !relative.isEmpty else { return nil }
+
+        var current = self
+        for component in relative.split(separator: "/") {
+            guard let match = current.children.first(where: { $0.name == component }) else {
+                return nil
+            }
+            current = match
+        }
+        return current
     }
 }

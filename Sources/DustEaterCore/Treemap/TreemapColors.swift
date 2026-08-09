@@ -7,16 +7,17 @@ public enum TreemapColors {
     /// Color for a directory node with variation for siblings at same depth.
     public static func colorForDirectory(depth: Int, name: String = "", theme: ColorTheme) -> Color {
         let colors = theme.directoryColors()
-        let baseIndex = depth % colors.count
+        guard !colors.isEmpty else { return .gray }
 
-        // For depth 0, cycle through all colors; for others, use depth + name variation
-        if depth == 0 {
-            return colors[baseIndex]
-        }
-
-        // Add variation for siblings by using both depth and name hash
-        let hash = abs(name.hashValue) % 2
-        let colorIndex = (baseIndex + hash) % colors.count
+        // A single treemap render only ever shows one flat level of
+        // siblings (the currently zoomed node's direct children), so
+        // `depth` is the same constant for every rect in it — it can't
+        // distinguish siblings on its own. Cycle through the *entire*
+        // palette by name hash instead of just alternating between two
+        // colors, so a folder full of subfolders doesn't collapse to one
+        // or two shades.
+        let hash = abs(name.hashValue)
+        let colorIndex = (depth + hash) % colors.count
         return colors[colorIndex]
     }
 
@@ -40,16 +41,44 @@ public enum TreemapColors {
 
     /// Determines color based on whether the node is a directory or file.
     public static func colorForNode(_ node: FileNode, depth: Int, theme: ColorTheme) -> Color {
-        // Weighted theme uses size-based hue (green→red)
+        // Weighted theme uses size-based hue (green→red) — already varies
+        // continuously per node, so it's left alone below.
         if theme == .weighted {
             return colorBySize(node.size)
         }
 
+        let baseColor: Color
         if node.isDirectory {
-            return colorForDirectory(depth: depth, theme: theme)
+            // `name:` matters here — omitting it (as this used to) makes
+            // every directory resolve to the exact same hash bucket, since
+            // it silently falls back to the same `name: ""` default every
+            // time. Combined with `depth` being constant per render (see
+            // `colorForDirectory`), that meant every folder in the app
+            // rendered as one single flat color, in every theme.
+            baseColor = colorForDirectory(depth: depth, name: node.name, theme: theme)
         } else {
-            return colorForFile(name: node.name, depth: depth, theme: theme)
+            baseColor = colorForFile(name: node.name, depth: depth, theme: theme)
         }
+
+        // `colorForFile` intentionally keys color to file-*type* (so every
+        // "other" or "document" file shares a hue), and `colorForDirectory`
+        // only has 5ish hues to spread across potentially many siblings —
+        // both mean real hash collisions in an ordinary folder. Nudge
+        // brightness deterministically per node on top of the base hue so
+        // same-category siblings still read as separate tiles instead of
+        // fusing into one solid block, without losing the type/depth
+        // signal the hue itself conveys.
+        return siblingNudged(baseColor, seed: node.name)
+    }
+
+    /// Deterministic per-node brightness nudge, layered on top of a base
+    /// color via opacity (the same mechanism `TreemapView` already uses to
+    /// distinguish hovered from resting tiles) rather than decomposing into
+    /// HSB — keeps this a pure, cheap function with no color-space math.
+    private static func siblingNudged(_ color: Color, seed: String) -> Color {
+        let bucket = abs(seed.hashValue) % 5
+        let opacityAdjustment = 1.0 - Double(bucket) * 0.06 // 1.00, 0.94, 0.88, 0.82, 0.76
+        return color.opacity(opacityAdjustment)
     }
 
     /// Map size to a hue from green (small) to red (large) using relative scaling

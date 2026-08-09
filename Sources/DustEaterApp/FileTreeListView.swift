@@ -8,15 +8,15 @@ struct FileTreeListView: View {
 
     var body: some View {
         List(selection: $selectedPath) {
-            OutlineGroup(root.children, id: \.path, children: \.outlineChildren) { node in
+            OutlineGroup(root.children.sorted { $0.size > $1.size }, id: \.path, children: \.outlineChildren) { node in
                 FileRowView(node: node, parentSize: root.size)
                     .tag(node.path)
             }
         }
         .listStyle(.sidebar)
         .onChange(of: selectedPath) { oldPath, newPath in
-            // When selection changes, find the node and notify
-            if let newPath, let node = root.find(path: newPath) {
+            // When selection changes, look up the node and notify
+            if let newPath, let node = root.node(atPath: newPath) {
                 onSelectNode(node)
             }
         }
@@ -24,18 +24,12 @@ struct FileTreeListView: View {
 }
 
 private extension FileNode {
+    /// Sorted lazily, one directory level at a time — `OutlineGroup` only
+    /// evaluates this for nodes it's actually displaying (visible rows, plus
+    /// whatever's needed to know if a collapsed row is expandable), so this
+    /// never sorts more of the tree than what's on screen.
     var outlineChildren: [FileNode]? {
-        children.isEmpty ? nil : children
-    }
-
-    func find(path: String) -> FileNode? {
-        if self.path == path { return self }
-        for child in children {
-            if let found = child.find(path: path) {
-                return found
-            }
-        }
-        return nil
+        children.isEmpty ? nil : children.sorted { $0.size > $1.size }
     }
 }
 
@@ -57,22 +51,27 @@ struct FileRowView: View {
             // Icon
             Image(systemName: node.isDirectory ? "folder.fill" : "doc.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(node.isDirectory ? .blue : .gray)
+                .foregroundStyle(node.isDirectory ? Color.accentColor : .gray)
                 .frame(width: 16)
 
             // Name
             VStack(alignment: .leading, spacing: 2) {
                 Text(node.name)
-                    .font(DustEaterTheme.Typography.body)
+                    .font(.control)
                     .lineLimit(1)
 
-                // Mini bar chart
-                GeometryReader { geometry in
-                    RoundedRectangle(cornerRadius: DustEaterTheme.Radius.sm)
-                        .fill(.blue.opacity(0.2))
-                        .frame(width: geometry.size.width * fraction, alignment: .leading)
-                }
-                .frame(height: 3)
+                // Mini bar chart. A `scaleEffect` transform (same pattern as
+                // the disk usage bar in DiskHomeView) rather than
+                // `GeometryReader`: `GeometryReader` is greedy and forces an
+                // extra layout pass, which is a well-known scroll-perf cost
+                // when it's inside every row of a list. `scaleEffect` is a
+                // render-only transform, so it doesn't participate in
+                // layout negotiation at all.
+                RoundedRectangle(cornerRadius: DustEaterTheme.Radius.sm)
+                    .fill(Color.accentColor.opacity(0.2))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .scaleEffect(x: fraction, y: 1, anchor: .leading)
+                    .frame(height: 3)
             }
 
             Spacer(minLength: 8)

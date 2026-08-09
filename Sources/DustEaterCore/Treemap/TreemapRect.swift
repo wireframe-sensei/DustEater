@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import SwiftUI
 
 /// One rectangle in a computed treemap layout, tied to a `FileNode`.
 public struct TreemapRect: Sendable, Identifiable {
@@ -7,11 +8,20 @@ public struct TreemapRect: Sendable, Identifiable {
     public let node: FileNode
     /// The rectangle's bounds in the treemap coordinate space (0...width, 0...height).
     public let frame: CGRect
+    /// Resolved once at layout time (depends only on the node, its depth,
+    /// and the active theme — none of which change without a fresh layout),
+    /// so the renderer doesn't need to re-derive it on every redraw,
+    /// including ones triggered purely by mouse movement during hover.
+    /// Defaults to `.clear` for callers (like `TreemapLayout`, used only by
+    /// tests exercising layout geometry) that don't render and so don't
+    /// need a real color.
+    public let color: Color
 
-    public init(node: FileNode, frame: CGRect) {
+    public init(node: FileNode, frame: CGRect, color: Color = .clear) {
         self.id = node.id
         self.node = node
         self.frame = frame
+        self.color = color
     }
 
     /// Whether a point in the treemap coordinate space hits this rectangle.

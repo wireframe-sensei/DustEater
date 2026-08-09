@@ -118,7 +118,19 @@
       "WebFetch(domain:nilcoalescing.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.appcoda.com)",
-      "WebFetch(domain:swiftwithmajid.com)"
+      "WebFetch(domain:swiftwithmajid.com)",
+      "Bash(swift test *)",
+      "Bash(nohup /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/.build/debug/DustEaterApp)",
+      "Bash(disown)",
+      "Bash(osascript -e 'tell application \"System Events\" to set frontApp to name of first application process whose unix id is 92932')",
+      "Bash(screencapture -x /private/tmp/claude-501/-Users-yaswanthreddyubbara-Documents-GitHub-DustEater/d049b708-1762-4bf5-a5eb-84dfa3d2d596/scratchpad/dusteater_launch.png)",
+      "Bash(screencapture -x /private/tmp/claude-501/-Users-yaswanthreddyubbara-Documents-GitHub-DustEater/d049b708-1762-4bf5-a5eb-84dfa3d2d596/scratchpad/dusteater_launch2.png)",
+      "Bash(ps -p 99857 -o command=)",
+      "Bash(kill 92932)",
+      "Bash(cp Sources/DustEaterCore/Treemap/TreemapColors.swift /tmp/TreemapColors.swift.bak)",
+      "Bash(sed -i '' 's/baseColor = colorForDirectory\\(depth: depth, name: node.name, theme: theme\\)/baseColor = colorForDirectory\\(depth: depth, theme: theme\\)/' Sources/DustEaterCore/Treemap/TreemapColors.swift)",
+      "Bash(cp /tmp/TreemapColors.swift.bak /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/Sources/DustEaterCore/Treemap/TreemapColors.swift)",
+      "Bash(rm /tmp/TreemapColors.swift.bak)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"
