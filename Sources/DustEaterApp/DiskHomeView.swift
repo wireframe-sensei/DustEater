@@ -251,7 +251,7 @@ struct DiskCardView: View {
                     // Progress bar
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(Color(nsColor: .quaternaryLabelColor))
+                            .fill(Color.progressTrack)
 
                         Capsule()
                             .fill(usageColor)

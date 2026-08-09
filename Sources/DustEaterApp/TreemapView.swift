@@ -25,7 +25,7 @@ struct TreemapView: View {
     /// render something, instead of creating and immediately discarding a
     /// view per rect that's too small to label.
     private var labeledRects: [TreemapRect] {
-        rects.filter { min($0.frame.width, $0.frame.height) > 60 }
+        rects.filter { min($0.frame.width, $0.frame.height) > TreemapMetrics.labelThresholdMinimum }
     }
 
     var body: some View {
@@ -93,11 +93,11 @@ struct TreemapView: View {
                 let minDim = min(rect.frame.width, rect.frame.height)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(rect.node.name)
-                        .font((minDim > 120 ? Font.callout : Font.caption).weight(.semibold))
+                        .font((minDim > TreemapMetrics.labelThresholdLargeFont ? Font.callout : Font.caption).weight(.semibold))
                         .lineLimit(2)
                         .truncationMode(.tail)
 
-                    if minDim > 100 {
+                    if minDim > TreemapMetrics.labelThresholdShowsSize {
                         Text(ByteFormatter.string(fromBytes: rect.node.size))
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
@@ -143,11 +143,11 @@ struct TreemapView: View {
                     }
                 }
                 .padding(10)
-                .frame(width: 200, alignment: .leading)
+                .frame(width: TooltipMetrics.width, alignment: .leading)
                 .background(.regularMaterial)
                 .cornerRadius(10)
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
-                .offset(x: 20, y: -50)
+                .offset(x: TooltipMetrics.offsetX, y: TooltipMetrics.offsetY)
                 .position(x: mouseLocation.x, y: mouseLocation.y)
                 .opacity(showTooltip ? 1.0 : 0.0)
             }
@@ -158,7 +158,7 @@ struct TreemapView: View {
     /// depth/theme lookup — since this runs once per rect on every base
     /// `Canvas` redraw.
     private func drawRect(_ rect: TreemapRect, in context: inout GraphicsContext) {
-        let path = Path(roundedRect: rect.frame, cornerRadius: 1)
+        let path = Path(roundedRect: rect.frame, cornerRadius: TreemapMetrics.tileCornerRadius)
         context.fill(path, with: .color(rect.color.opacity(0.85)))
         context.stroke(path, with: .color(Color(nsColor: .separatorColor)), lineWidth: 0.5)
     }
@@ -166,11 +166,11 @@ struct TreemapView: View {
     /// Hovered-state draw, used only by the small overlay `Canvas` scoped to
     /// the single currently-hovered rect.
     private func drawHoverHighlight(_ rect: TreemapRect, in context: inout GraphicsContext) {
-        let shadowPath = Path(roundedRect: rect.frame.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 1)
-        context.fill(shadowPath, with: .color(.black.opacity(0.1)))
+        let shadowPath = Path(roundedRect: rect.frame.insetBy(dx: 0.5, dy: 0.5), cornerRadius: TreemapMetrics.tileCornerRadius)
+        context.fill(shadowPath, with: .color(.black.opacity(TreemapMetrics.hoverShadowOpacity)))
 
-        let path = Path(roundedRect: rect.frame, cornerRadius: 1)
+        let path = Path(roundedRect: rect.frame, cornerRadius: TreemapMetrics.tileCornerRadius)
         context.fill(path, with: .color(rect.color.opacity(0.95)))
-        context.stroke(path, with: .color(highlightColor.opacity(0.6)), lineWidth: 1.2)
+        context.stroke(path, with: .color(highlightColor.opacity(0.6)), lineWidth: TreemapMetrics.hoverStrokeLineWidth)
     }
 }

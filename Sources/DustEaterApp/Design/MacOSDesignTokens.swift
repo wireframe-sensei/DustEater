@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Design tokens with no SwiftUI/AppKit semantic equivalent, per the macOS
 /// HIG design system kit (`.claude/skills/macos-hig-design-system`).
@@ -65,4 +66,59 @@ extension EnvironmentValues {
     var controlMetrics: ControlMetrics {
         ControlMetrics(controlSize)
     }
+}
+
+/// Builds a `Color` that resolves its RGBA per-appearance, the same way a
+/// dynamic `NSColor` would — used below for the one color in this file that
+/// has no system equivalent to just delegate to.
+private func adaptiveColor(light: (CGFloat, CGFloat, CGFloat, CGFloat),
+                            dark: (CGFloat, CGFloat, CGFloat, CGFloat)) -> Color {
+    Color(nsColor: NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let c = isDark ? dark : light
+        return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: c.3)
+    })
+}
+
+extension Color {
+    /// `Progress Bars/Track - Stroke` — #000 @7% light / #FFF @4% dark.
+    /// `.quaternaryLabelColor` (10%) is the nearest semantic color but the
+    /// kit specifies a fainter track than that, so this is a real gap, not
+    /// laziness about reaching for the system color first (C4).
+    static let progressTrack = adaptiveColor(light: (0, 0, 0, 0.07), dark: (1, 1, 1, 0.04))
+}
+
+/// Treemap tile geometry with no HIG/control-size equivalent — these are
+/// data-visualization decisions (tile rounding, hover emphasis, label
+/// legibility cutoffs), not control chrome, so they don't belong on the
+/// `ControlMetrics` scale above (D8, D9).
+enum TreemapMetrics {
+    /// Corner radius for both the resting-state tile fill and the hover
+    /// highlight — deliberately tiny; treemap tiles read as a dense mosaic,
+    /// not individually rounded cards.
+    static let tileCornerRadius: CGFloat = 1
+    /// Stroke width of the accent/gray hover outline drawn around the
+    /// currently-hovered tile.
+    static let hoverStrokeLineWidth: CGFloat = 1.2
+    /// Opacity of the soft drop-shadow fill drawn just inside a hovered
+    /// tile, to lift it visually off its neighbors.
+    static let hoverShadowOpacity: Double = 0.1
+    /// Minimum tile dimension (points) before any label is drawn at all.
+    static let labelThresholdMinimum: CGFloat = 60
+    /// Minimum tile dimension before the byte-size sub-label also appears.
+    static let labelThresholdShowsSize: CGFloat = 100
+    /// Minimum tile dimension before the name label steps up from Caption
+    /// to Callout.
+    static let labelThresholdLargeFont: CGFloat = 120
+}
+
+/// Tooltip geometry with no HIG token — this app's tooltip is a custom
+/// SwiftUI overlay (not `.help()`), so its size and cursor-relative offset
+/// are just this component's own layout, not derived from any control size (D7).
+enum TooltipMetrics {
+    static let width: CGFloat = 200
+    /// Offset from the mouse location so the tooltip doesn't sit directly
+    /// under the pointer.
+    static let offsetX: CGFloat = 20
+    static let offsetY: CGFloat = -50
 }

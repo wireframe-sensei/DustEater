@@ -204,7 +204,7 @@ struct ScanningStateView: View {
                 ZStack {
                     // Doughnut progress ring background
                     Circle()
-                        .stroke(Color(nsColor: .quaternaryLabelColor), lineWidth: 12)
+                        .stroke(Color.progressTrack, lineWidth: 12)
                         .frame(width: 280, height: 280)
 
                     // Doughnut progress ring (animated to progress)
