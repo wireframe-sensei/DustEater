@@ -67,7 +67,7 @@ struct FileRowView: View {
                 // when it's inside every row of a list. `scaleEffect` is a
                 // render-only transform, so it doesn't participate in
                 // layout negotiation at all.
-                RoundedRectangle(cornerRadius: DustEaterTheme.Radius.sm)
+                Capsule()
                     .fill(Color.accentColor.opacity(0.2))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .scaleEffect(x: fraction, y: 1, anchor: .leading)

@@ -250,10 +250,10 @@ struct DiskCardView: View {
 
                     // Progress bar
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
+                        Capsule()
                             .fill(Color(nsColor: .quaternaryLabelColor))
 
-                        RoundedRectangle(cornerRadius: 4)
+                        Capsule()
                             .fill(usageColor)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .scaleEffect(x: disk.usagePercentage / 100.0, y: 1, anchor: .leading)
