@@ -36,6 +36,9 @@ let package = Package(
         .executableTarget(
             name: "DustEaterApp",
             dependencies: ["DustEaterCore"],
+            resources: [
+                .copy("Resources/AppIcon.png")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]
