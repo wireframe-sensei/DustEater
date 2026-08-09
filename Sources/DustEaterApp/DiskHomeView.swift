@@ -65,12 +65,10 @@ struct DiskHomeView: View {
                         }
                     }
                     .padding(14)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(12)
+                    .glassBackground(.ultraThinMaterial, cornerRadius: 12)
                 }
                 .padding(24)
-                .background(.ultraThinMaterial)
-                .cornerRadius(16)
+                .glassBackground(.ultraThinMaterial, cornerRadius: 16)
                 .padding(20)
 
                 if disks.isEmpty {
@@ -189,8 +187,7 @@ struct CustomFolderCardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 160)
             .padding(16)
-            .background(.ultraThinMaterial)
-            .cornerRadius(metrics.cornerRadius)
+            .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
@@ -264,8 +261,7 @@ struct DiskCardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 160)
             .padding(16)
-            .background(.ultraThinMaterial)
-            .cornerRadius(metrics.cornerRadius)
+            .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
             .foregroundStyle(.primary)
             .opacity(isHovered ? 0.9 : 1.0)
         }

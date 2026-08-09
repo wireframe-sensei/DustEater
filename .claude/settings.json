@@ -130,7 +130,9 @@
       "Bash(cp Sources/DustEaterCore/Treemap/TreemapColors.swift /tmp/TreemapColors.swift.bak)",
       "Bash(sed -i '' 's/baseColor = colorForDirectory\\(depth: depth, name: node.name, theme: theme\\)/baseColor = colorForDirectory\\(depth: depth, theme: theme\\)/' Sources/DustEaterCore/Treemap/TreemapColors.swift)",
       "Bash(cp /tmp/TreemapColors.swift.bak /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/Sources/DustEaterCore/Treemap/TreemapColors.swift)",
-      "Bash(rm /tmp/TreemapColors.swift.bak)"
+      "Bash(rm /tmp/TreemapColors.swift.bak)",
+      "Bash(xcrun --show-sdk-version)",
+      "Bash(xcrun --show-sdk-path)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

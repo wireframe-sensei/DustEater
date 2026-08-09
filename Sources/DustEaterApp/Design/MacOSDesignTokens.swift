@@ -122,3 +122,26 @@ enum TooltipMetrics {
     static let offsetX: CGFloat = 20
     static let offsetY: CGFloat = -50
 }
+
+extension View {
+    /// Real Liquid Glass on macOS 26+, falling back to the given `Material`
+    /// everywhere else. Only for surfaces this app draws itself — sidebars,
+    /// toolbars, and other real system chrome already render with genuine
+    /// Liquid Glass automatically on macOS 26 and need no help here (per
+    /// `swift.md`: "prefer the built-in `.glassEffect(...)` over
+    /// reconstructing it").
+    ///
+    /// `#available` only gates *runtime* behavior — `.glassEffect` still
+    /// has to be a real compiled symbol, which requires building against
+    /// the macOS 26 SDK.
+    @ViewBuilder
+    func glassBackground(_ material: Material, cornerRadius: CGFloat) -> some View {
+        if #available(macOS 26, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self
+                .background(material)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        }
+    }
+}

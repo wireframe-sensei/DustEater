@@ -144,8 +144,7 @@ struct TreemapView: View {
                 }
                 .padding(10)
                 .frame(width: TooltipMetrics.width, alignment: .leading)
-                .background(.regularMaterial)
-                .cornerRadius(10)
+                .glassBackground(.regularMaterial, cornerRadius: 10)
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
                 .offset(x: TooltipMetrics.offsetX, y: TooltipMetrics.offsetY)
                 .position(x: mouseLocation.x, y: mouseLocation.y)

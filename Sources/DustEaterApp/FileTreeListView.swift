@@ -50,7 +50,8 @@ struct FileRowView: View {
         HStack(spacing: DustEaterTheme.Spacing.md) {
             // Icon
             Image(systemName: node.isDirectory ? "folder.fill" : "doc.fill")
-                .font(.system(size: 11))
+                .font(.control)
+                .imageScale(.small)
                 .foregroundStyle(node.isDirectory ? Color.accentColor : .gray)
                 .frame(width: 16)
 
