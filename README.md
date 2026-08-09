@@ -11,6 +11,13 @@ files, and see app bundles rolled up with the data they leave behind in
 Built with SwiftUI and AppKit, no external dependencies, distributed as a
 Swift package.
 
+![Overview screen — treemap with sidebar navigation](public/OverviewScreen.png)
+
+<p align="center">
+  <img src="public/HomeScreen.png" width="49%" alt="Home screen — pick a disk or folder to analyze" />
+  <img src="public/LoadingScreen.png" width="49%" alt="Scanning in progress" />
+</p>
+
 ## Features
 
 - **Fast recursive scanning** — uses `getattrlistbulk` with concurrent
