@@ -190,6 +190,7 @@ struct CustomFolderCardView: View {
             .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
         .pointingHandCursor()
     }
 }
