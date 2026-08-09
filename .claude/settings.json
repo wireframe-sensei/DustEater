@@ -132,7 +132,9 @@
       "Bash(cp /tmp/TreemapColors.swift.bak /Users/yaswanthreddyubbara/Documents/GitHub/DustEater/Sources/DustEaterCore/Treemap/TreemapColors.swift)",
       "Bash(rm /tmp/TreemapColors.swift.bak)",
       "Bash(xcrun --show-sdk-version)",
-      "Bash(xcrun --show-sdk-path)"
+      "Bash(xcrun --show-sdk-path)",
+      "Bash(security find-identity *)",
+      "Bash(xcrun altool *)"
     ],
     "additionalDirectories": [
       "/private/tmp/YMTreeMap"

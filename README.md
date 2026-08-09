@@ -37,6 +37,24 @@ Swift package.
   on macOS 26+ (falls back to a Material-based approximation on earlier
   systems — no separate build required).
 
+## Download
+
+Prebuilt DMGs (universal — Apple Silicon and Intel) are attached to each
+[GitHub Release](https://github.com/wireframe-sensei/DustEater/releases).
+
+> [!NOTE]
+> These builds are **unsigned** (no Apple Developer Program membership
+> behind this project yet), so macOS Gatekeeper will flag the app as being
+> from an unidentified developer, or say it's damaged. After dragging
+> `DustEater.app` to Applications, either **right-click it → Open** (and
+> confirm in the dialog that appears), or run:
+> ```sh
+> xattr -cr /Applications/DustEater.app
+> ```
+> This is a one-time step per download — it's not a sign of anything wrong
+> with the app, just the standard consequence of shipping without a paid
+> code-signing certificate.
+
 ## Requirements
 
 - macOS 14 or later to build and run.

@@ -48,6 +48,24 @@ Open an issue with:
 If it's a scanning issue, the path/volume you were scanning (or its rough
 size/structure, if you'd rather not share the exact path) is helpful context.
 
+## Releasing (maintainers)
+
+Releases are fully automated. Pushing a tag matching `v*.*.*` triggers
+`.github/workflows/release.yml`, which builds a universal (arm64 + x86_64)
+release binary, packages it as `DustEater.app` using the `Packaging/Info.plist`
+template, ad-hoc codesigns it, wraps it in a DMG, and publishes it as a
+GitHub Release with auto-generated notes:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The version number in the tag (without the `v`) becomes both
+`CFBundleShortVersionString` and `CFBundleVersion` in the shipped app. No
+manual build step, no local signing — the whole thing runs on
+`macos-15` GitHub-hosted runners.
+
 ## Code of Conduct
 
 This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). By

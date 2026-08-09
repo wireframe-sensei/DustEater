@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build (arm64)
+        run: swift build -c release --arch arm64
+
+      - name: Build (x86_64)
+        run: swift build -c release --arch x86_64
+
+      - name: Assemble universal binary
+        run: |
+          mkdir -p build
+          lipo -create -output build/DustEaterApp \
+            .build/arm64-apple-macosx/release/DustEaterApp \
+            .build/x86_64-apple-macosx/release/DustEaterApp
+          lipo -info build/DustEaterApp
+
+      - name: Assemble .app bundle
+        run: |
+          APP="build/DustEater.app"
+          mkdir -p "$APP/Contents/MacOS"
+          mkdir -p "$APP/Contents/Resources"
+          cp build/DustEaterApp "$APP/Contents/MacOS/DustEaterApp"
+          chmod +x "$APP/Contents/MacOS/DustEaterApp"
+          sed "s/__VERSION__/${{ steps.version.outputs.version }}/g" \
+            Packaging/Info.plist > "$APP/Contents/Info.plist"
+
+      - name: Ad-hoc codesign
+        # No Developer ID certificate is configured for this project, so this
+        # is an ad-hoc signature (identity "-"), not a real one. It lets the
+        # app run at all, but macOS Gatekeeper still shows an "unidentified
+        # developer" warning on first launch for anyone who downloads it -
+        # documented in the release notes and README.
+        run: codesign --force --deep --sign - "build/DustEater.app"
+
+      - name: Create DMG
+        run: |
+          rm -rf dmg-root
+          mkdir -p dmg-root
+          cp -R "build/DustEater.app" dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create -volname "DustEater" -srcfolder dmg-root -ov -format UDZO \
+            "DustEater-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "DustEater-${{ steps.version.outputs.version }}.dmg" \
+            --title "DustEater ${{ github.ref_name }}" \
+            --generate-notes \
+            --notes "**This build is unsigned.** macOS Gatekeeper will say it's from an unidentified developer or that it's damaged. After dragging DustEater.app to Applications, either right-click it and choose **Open** (then confirm), or run: \`xattr -cr /Applications/DustEater.app\`. See the README for details."
