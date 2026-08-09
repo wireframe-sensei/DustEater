@@ -1,5 +1,8 @@
 # DustEater
 
+[![CI](https://github.com/wireframe-sensei/DustEater/actions/workflows/ci.yml/badge.svg)](https://github.com/wireframe-sensei/DustEater/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A native macOS disk usage analyzer. Scan a volume or folder and see where the
 space went in an interactive treemap — zoom into folders, inspect individual
 files, and see app bundles rolled up with the data they leave behind in
@@ -92,5 +95,6 @@ algorithm) is used under its original Apache License 2.0 terms; see
 
 ## Contributing
 
-Issues and pull requests are welcome. For anything nontrivial, opening an
-issue first to discuss the approach is appreciated before sending a PR.
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+for setup, project layout, and PR guidelines. This project follows the
+[Code of Conduct](CODE_OF_CONDUCT.md).
