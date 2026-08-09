@@ -196,6 +196,25 @@ Apache License 2.0 terms - its copyright header must stay intact, and
 `NOTICE` carries the full attribution and license text per Apache 2.0 §4(a).
 Don't relicense or strip that file's header.
 
+## Recording non-obvious decisions
+
+When you make a choice during development that isn't obvious from reading the
+code alone - an unusual trade-off, a constraint that forced a particular
+approach, a deferred improvement, or a deliberate rejection of a "natural"
+solution - add it to the "Deliberately deferred / intentional exceptions"
+section below.
+
+Include:
+- **The decision** - what choice was made
+- **Why** - the reasoning, constraint, or trade-off (not obvious from code alone)
+- **Where** - file/function names if specific, or the area of the codebase
+- **When to revisit** - if applicable (e.g. "after SDK X is available", "if Y
+  becomes a bottleneck", "large enough to be its own task")
+
+This prevents future developers (or the user in future sessions) from
+"fixing" deliberate decisions as if they were bugs, and documents the
+accumulated architectural reasoning of the project.
+
 ## Deliberately deferred / intentional exceptions
 
 Things that look like they might need fixing but are actual decisions, not
