@@ -8,5 +8,6 @@ struct DustEaterApp: App {
                 .frame(minWidth: 1000, minHeight: 600)
         }
         .defaultSize(width: 1200, height: 700)
+        .windowToolbarStyle(.unified(showsTitle: false))
     }
 }
