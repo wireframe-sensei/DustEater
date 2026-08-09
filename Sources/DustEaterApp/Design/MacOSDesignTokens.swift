@@ -131,11 +131,18 @@ extension View {
     /// `swift.md`: "prefer the built-in `.glassEffect(...)` over
     /// reconstructing it").
     ///
-    /// `#available` only gates *runtime* behavior — `.glassEffect` still
-    /// has to be a real compiled symbol, which requires building against
-    /// the macOS 26 SDK.
+    /// `#available` only gates *runtime* behavior — `.glassEffect` still has
+    /// to be a real compiled symbol, which requires building against the
+    /// macOS 26 SDK (bundled with Xcode 26 / Swift 6.2+). A toolchain older
+    /// than that — e.g. GitHub's `macos-15` hosted runner as of this
+    /// writing, still on Xcode 16.x — doesn't declare the symbol at all, so
+    /// `#available` alone isn't enough; this fails to *compile* there, not
+    /// just to run. `#if compiler(>=6.2)` excludes the whole branch from
+    /// being type-checked on such toolchains, leaving only the Material
+    /// fallback — confirmed against a real CI failure on macos-15 runners.
     @ViewBuilder
     func glassBackground(_ material: Material, cornerRadius: CGFloat) -> some View {
+        #if compiler(>=6.2)
         if #available(macOS 26, *) {
             self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
         } else {
@@ -143,5 +150,10 @@ extension View {
                 .background(material)
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         }
+        #else
+        self
+            .background(material)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        #endif
     }
 }
