@@ -2,15 +2,6 @@ import SwiftUI
 
 /// Apple-inspired design system for DustEater.
 enum DustEaterTheme {
-    // MARK: - Colors
-    enum Colors {
-        static let accent = Color(red: 0.0, green: 0.48, blue: 1.0) // Apple blue
-        static let directory = Color(red: 0.2, green: 0.6, blue: 1.0)
-        static let file = Color.secondary
-        static let divider = Color(nsColor: .separatorColor)
-        static let background = Color(nsColor: .controlBackgroundColor)
-    }
-
     // MARK: - Spacing
     enum Spacing {
         static let xs: CGFloat = 4

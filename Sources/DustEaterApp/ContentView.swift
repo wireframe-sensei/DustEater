@@ -181,47 +181,6 @@ final class TreemapCache {
     }
 }
 
-// MARK: - Idle State
-struct IdleStateView: View {
-    let onChooseFolder: () -> Void
-
-    var body: some View {
-        VStack(spacing: DustEaterTheme.Spacing.xl) {
-            Image(systemName: "folder.badge.magnifyingglass")
-                .font(.system(size: 64))
-                .foregroundStyle(Color.accentColor.opacity(0.6))
-
-            VStack(spacing: DustEaterTheme.Spacing.md) {
-                Text("Analyze Disk Usage")
-                    .font(DustEaterTheme.Typography.title1)
-
-                Text("Choose a folder to see how much space it's using")
-                    .font(DustEaterTheme.Typography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Button {
-                onChooseFolder()
-            } label: {
-                Label("Choose Folder", systemImage: "folder.badge.plus")
-                    .font(.control)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.accentColor)
-            .controlSize(.large)
-
-            VStack(spacing: DustEaterTheme.Spacing.sm) {
-                Text("Keyboard shortcut: ⌘O")
-                    .font(DustEaterTheme.Typography.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
-    }
-}
-
 // MARK: - Scanning State
 struct ScanningStateView: View {
     let progress: ScanProgressSnapshot
