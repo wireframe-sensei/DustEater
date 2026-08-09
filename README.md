@@ -39,8 +39,12 @@ Swift package.
 
 ## Download
 
-Prebuilt DMGs (universal — Apple Silicon and Intel) are attached to each
-[GitHub Release](https://github.com/wireframe-sensei/DustEater/releases).
+Grab the DMG from the [latest release](https://github.com/wireframe-sensei/DustEater/releases/latest).
+There's just the one download — it's a single universal binary (Apple
+Silicon and Intel) that detects the OS at runtime: real Liquid Glass on
+macOS 26+, and an equivalent Material-based appearance on macOS 14–25. You
+don't need to pick a version for your system; the same DMG is correct
+either way.
 
 > [!NOTE]
 > These builds are **unsigned** (no Apple Developer Program membership
@@ -57,10 +61,17 @@ Prebuilt DMGs (universal — Apple Silicon and Intel) are attached to each
 
 ## Requirements
 
-- macOS 14 or later to build and run.
-- Swift 6 toolchain (Xcode 16+).
-- macOS 26+ if you want the real Liquid Glass rendering; everything works
-  on earlier systems too, just with a Material approximation instead.
+- **To run it**: macOS 14 or later. The same binary renders real Liquid
+  Glass on macOS 26+ and a Material-based equivalent below that — nothing
+  extra needed either way.
+- **To build it from source**: a Swift 6 toolchain (Xcode 16+). Note that
+  which Xcode you build with matters for one thing specifically: the
+  Liquid Glass code path only gets *compiled in* when built with Xcode 26+
+  (it needs the macOS 26 SDK to exist at all, not just to run on it) — a
+  build made with an older Xcode still works everywhere, it just never
+  renders true glass, only the Material fallback, regardless of what OS
+  it's later run on. This is why prebuilt releases (see Download, above)
+  are the simpler way to get the real thing.
 - **Full Disk Access.** DustEater runs unsandboxed so it can read arbitrary
   user directories; without Full Disk Access (System Settings → Privacy &
   Security → Full Disk Access) it can only scan folders the OS grants
