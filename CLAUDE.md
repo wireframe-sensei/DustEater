@@ -165,21 +165,20 @@ Distribution is DMGs attached to GitHub Releases - not committed binaries.
   Info.plist for local development (`swift run` uses a bare executable);
   this is packaging-only and doesn't affect the dev workflow.
 - `.github/workflows/release.yml` - triggered by pushing a tag matching
-  `v*.*.*`. Builds arm64 and x86_64 release binaries separately, `lipo`s
-  them into a universal binary, assembles `DustEater.app`, ad-hoc codesigns
-  it (no Developer ID certificate is configured - `security find-identity
-  -v -p codesigning` returns zero identities on record), packages as a DMG
-  via `hdiutil`, and publishes a GitHub Release via `gh release create`.
-  Releasing is `git tag vX.Y.Z && git push origin vX.Y.Z` - no manual steps
-  otherwise.
-- **Known limitation**: because of the SDK gotcha above, CI-built releases
-  only get the Material fallback (no real Liquid Glass) - `.glassEffect`
-  compiles out on the `macos-15` runner. For a build with genuine Liquid
-  Glass, build locally on a machine with the macOS 26 SDK using the same
-  steps as the workflow, then `gh release upload vX.Y.Z <path-to-dmg>
-  --clobber` to replace the CI-built asset. This is a manual extra step
-  after every tag push until GitHub's hosted runners get a new-enough
-  Xcode, or a self-hosted runner is set up for releases.
+  `v*.*.*`. Uses a hybrid build strategy:
+  - arm64 builds on `xcode-27` runner (macOS 26 SDK) - includes real Liquid
+    Glass support (`.glassEffect`).
+  - x86_64 builds on `macos-15` runner (older SDK) - uses Material fallback
+    for Liquid Glass effects.
+  - Both binaries are combined into a universal binary via `lipo`, then
+    assembled as `DustEater.app`, ad-hoc codesigned (no Developer ID
+    certificate), packaged as a DMG, and published via GitHub Release.
+  - Releasing is `git tag vX.Y.Z && git push origin vX.Y.Z` - no manual
+    steps otherwise.
+- **Limitation for x86_64 (Intel Mac) users**: The x86_64 binary uses the
+  Material fallback for Liquid Glass effects since the `macos-15` runner
+  doesn't have the macOS 26 SDK. On arm64 Macs (the vast majority of
+  modern hardware), the app runs with full Liquid Glass support.
 - Builds are unsigned/ad-hoc-signed (no Apple Developer Program membership
   behind this project). Gatekeeper will warn on first launch - the
   workaround (`xattr -cr` or right-click → Open) is documented in the
