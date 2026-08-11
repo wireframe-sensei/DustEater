@@ -14,14 +14,22 @@ public final class ScanCoordinator {
     public var zoomNode: FileNode?
     /// Duration of the completed scan in seconds
     public private(set) var scanDuration: Double = 0
+    /// Set when `watcher` detects a filesystem change under the scanned
+    /// root while `state == .finished`. Deliberately just a signal to
+    /// prompt a manual rescan, not something reconciled into `state`
+    /// automatically - see `FileSystemWatcher`'s doc comment for why.
+    public private(set) var hasDetectedChanges = false
 
     private var scanTask: Task<Void, Never>?
     private var scanStartTime: DispatchTime?
+    private var watcher: FileSystemWatcher?
 
     public init() {}
 
     public func startScan(path: String) {
         scanTask?.cancel()
+        watcher = nil
+        hasDetectedChanges = false
         scanStartTime = DispatchTime.now()
         scanDuration = 0
         state = .scanning(ScanProgressSnapshot(itemsScanned: 0, bytesScanned: 0, currentPath: path))
@@ -73,13 +81,27 @@ public final class ScanCoordinator {
             }
 
             self.state = .finished(node)
+
+            // Watch the original scan root, not `zoomNode` - the signal
+            // needs to stay correct regardless of how deep the user has
+            // zoomed in.
+            self.watcher = FileSystemWatcher(path: path) { [weak self] in
+                self?.hasDetectedChanges = true
+            }
         }
     }
 
     public func cancelScan() {
         scanTask?.cancel()
         scanTask = nil
+        watcher = nil
         state = .idle
+    }
+
+    public func updateTree(_ newRoot: FileNode) {
+        if case .finished = state {
+            state = .finished(newRoot)
+        }
     }
 
     private func applyProgress(_ progress: ScanProgress) {
