@@ -105,6 +105,37 @@ the request doesn't say "design system" explicitly - it covers colors,
 sizing, typography, materials, and the component inventory this app is
 built against.
 
+## Check for dead ends when building any new screen or state
+
+A dead end is any screen, state, alert, or error condition the user can land
+on with no way to proceed, retry, or get back to a known-good screen (usually
+`DiskHomeView`, reached via `isOnHome = true`). This app has hit this bug
+class repeatedly - `ErrorStateView` and `PermissionBannerView` both shipped
+with no way back to home, the `.idle` scan state had no cancel button, and
+`DiskHomeView`'s "Loading disks..." spinner had no retry or empty-state
+fallback - so treat it as a standing checklist, not a one-time cleanup:
+
+- **Every new `ScanState` case, loading/error/empty view, or full-screen
+  state needs an explicit exit**: a button back to home, a retry, or a cancel
+  - not just "the previous screen's button still technically works." If a
+  view can be reached with `isOnHome == false` and has no navigation
+  chrome of its own, assume it's a dead end until proven otherwise.
+- **Reuse `ContentView.backToHome()`** rather than re-deriving
+  `isOnHome = true; selectedPath = nil` at a new call site - it exists
+  specifically so every exit point stays in sync as more are added.
+- **A loading state needs a way to tell "still loading" apart from "loaded
+  and found nothing."** A bare spinner with no timeout and no distinguishing
+  state silently becomes a permanent dead end the moment the thing it's
+  waiting for returns zero results instead of erroring - see
+  `DiskHomeView.hasLoadedOnce`.
+- **A destructive or write action's `catch` block needs user-facing
+  feedback, not just `print()`.** A silent failure isn't a navigation dead
+  end, but it's the same experience for the user: they took an action, got
+  no response, and have no way to know whether to retry, and no idea why it
+  didn't work.
+- When adding a feature, ask "if this fails, or is still loading, or the
+  user changes their mind - what do they click?" before considering it done.
+
 ## SDK/toolchain gotcha - verify against CI, not just locally
 
 This machine may have a newer Xcode/SDK installed than GitHub's hosted
@@ -231,3 +262,84 @@ oversights - don't "fix" these without the user asking:
   colored rounded-square icon-tile badges (App Store/Settings-style) - an
   explicit choice, since this app is a file/disk browser closer to Finder's
   category than a hub-style app.
+- `FileTreeListView.swift` uses a hand-rolled recursive `FileOutlineRow`
+  (`DisclosureGroup` + an owned `expandedPaths: Set<String>`, passed in as a
+  `@Binding` and actually held by `MainContentView` in `ContentView.swift` -
+  see below for why) instead of `OutlineGroup`. This looks like reinventing a
+  system control, but `OutlineGroup` owns its disclosure state internally with
+  no way to open a branch from code - it can't support "select a node (e.g.
+  from a treemap click) and auto-expand/scroll the sidebar to reveal it,"
+  which is exactly what `reveal(_:proxy:)` does. The
+  `if expandedPaths.contains(node.path)` guard inside `FileOutlineRow`'s
+  `DisclosureGroup` content is load-bearing, not redundant - it restores the
+  one-level-at-a-time lazy sort that `OutlineGroup` gave for free (see the
+  comment on `outlineChildren`); without it the recursion eagerly
+  builds/sorts collapsed subtrees.
+- The delay before `proxy.scrollTo` in `reveal(_:proxy:)` (a `Task.yield()`
+  then a 50ms sleep) is required, not superstition: `scrollTo` is a silent
+  no-op for a row inside a branch that was expanded in the same update - the
+  `List` hasn't rebuilt to materialize that row yet. Only taken when the
+  target branch actually needed expanding; an already-visible row scrolls
+  immediately with no delay.
+- There is no per-row `Menu`/ellipsis button and no `.contextMenu` in the
+  sidebar (`FileRowView` in `FileTreeListView.swift`). A macOS `Menu` always
+  renders as a bordered pull-down button with a menu indicator regardless of
+  the frame it's given, and at sidebar width that button alone was crushing
+  every row's name down to two or three characters. Actions for the selected
+  item (Reveal in Finder, Copy Path, Delete) live in `MainContentView`'s
+  toolbar instead (`ContentView.swift`), acting on `selectedNode` - a
+  genuinely native macOS pattern (Finder, Mail, Photos). They're `.disabled`
+  rather than conditionally hidden when nothing is selected, so the toolbar
+  doesn't reflow on every selection change. `expandedPaths` and the delete
+  alert moved from `FileTreeListView` to `MainContentView` along with this,
+  since `deleteItem` needs to prune expansion state and the alert is now
+  triggered from the toolbar rather than a row. Note `.contextMenu` costs no
+  horizontal width and pairs naturally with a selection toolbar - adding one
+  later is a deliberate scope choice being deferred, not a gap to "fix."
+- Filesystem changes made while the app is open are **detected but not
+  reconciled live** into the scanned tree. `FileSystemWatcher`
+  (`Sources/DustEaterCore/Scanner/FileSystemWatcher.swift`) uses FSEvents to
+  cheaply notice that something changed under the scanned root - kernel-level
+  subtree monitoring, the same mechanism Spotlight/Time Machine use, no
+  polling - but it only flips `ScanCoordinator.hasDetectedChanges` to `true`,
+  surfaced as an orange "Rescan" toolbar button that reuses the existing full
+  `startScan(path:)` path. It deliberately does **not** try to merge the
+  change into the live `FileNode` tree: FSEvents reports "this directory
+  changed," not a diff, `FileNode` has no insert/replace method (only
+  `removingNode(atPath:)`), and correctly propagating a partial re-scan's
+  size/itemCount deltas up every ancestor while keeping the treemap cache and
+  sidebar expansion state consistent is real, error-prone work - the same
+  reason DaisyDisk/GrandPerspective/OmniDiskSweeper don't live-update either,
+  they expect a manual re-scan. `FileSystemWatcher` is also the app's first
+  continuously-running background component (previously every `Task` in the
+  codebase was one-shot); it follows `ScanCoordinator.scanTask`'s existing
+  own-and-cancel-on-replace shape. `kFSEventStreamCreateFlagIgnoreSelf` is
+  load-bearing, not incidental: without it, an in-app delete (already
+  reconciled into the tree via `removingNode(atPath:)`) would immediately
+  re-trigger a spurious "files changed, rescan?" prompt about a change the
+  app already knows about - verified directly against real FSEvents (not
+  just reasoned about) during implementation. No automated test covers
+  `FileSystemWatcher` itself - real FSEvents delivery is OS-scheduled and
+  asynchronous, on the order of seconds, which isn't practical to assert on
+  in `swift test` without adding real wall-clock delay to every run.
+- `FileOperations.isSystemProtected` (`Sources/DustEaterCore/FileOperations.swift`)
+  protects `/Users`, every account's home directory (`/Users/<name>`), and
+  the default folders macOS creates in each one (Desktop, Documents,
+  Downloads, Movies, Music, Pictures, Public, Library) - none of these were
+  in the protected list before, so the app would let you delete an entire
+  home directory or someone's whole Downloads folder. Protection for these
+  is deliberately by **exact path**, not prefix like `systemPaths` above:
+  the point of the app is cleaning individual clutter out of Downloads, so
+  only the folder itself is blocked, not its contents.
+  `defaultUserFolderNames`/`isProtectedUserFolder` are path-shape-based
+  (component count under `/Users/...`) rather than keyed to
+  `NSHomeDirectory()`, so a full-disk scan protects every account it can
+  see, not just the one running DustEater.
+  **Gotcha found while adding this**: `NSString.standardizingPath` silently
+  collapses `/private/tmp` → `/tmp` (and `/private/var` → `/var`,
+  `/private/etc` → `/etc`) before `isSystemProtected` ever compares it -
+  confirmed directly against the real API, not assumed. The list used to
+  contain `/private/tmp` with no corresponding plain `/tmp` entry, so `/tmp`
+  was never actually protected despite looking like it was; fixed by
+  listing the public form only. Don't re-add a `/private/...` entry here -
+  it will silently never match.

@@ -40,4 +40,39 @@ struct FileNodeTests {
         #expect(root.node(atPath: "/elsewhere") == nil)
         #expect(root.node(atPath: "/root/") == nil)
     }
+
+    /// `ancestorPaths(toDescendantAtPath:)` drives the sidebar's "reveal this
+    /// selection" behavior: it tells the tree which branches must be expanded
+    /// for a given path's row to exist. Pins down the deep-descendant case
+    /// (the one the sidebar actually needs), the no-op cases where nothing
+    /// needs expanding, and the root-at-"/" case where naive path joining
+    /// would produce a doubled slash that matches no real node.
+    @Test func ancestorPathsForDeepDescendant() {
+        let root = makeTree()
+        #expect(root.ancestorPaths(toDescendantAtPath: "/root/sub1/leaf.bin") == ["/root/sub1"])
+    }
+
+    @Test func ancestorPathsForDirectChildIsEmpty() {
+        let root = makeTree()
+        #expect(root.ancestorPaths(toDescendantAtPath: "/root/sub2") == [])
+    }
+
+    @Test func ancestorPathsForSelfIsEmpty() {
+        let root = makeTree()
+        #expect(root.ancestorPaths(toDescendantAtPath: "/root") == [])
+    }
+
+    @Test func ancestorPathsForUnrelatedPathIsEmpty() {
+        let root = makeTree()
+        #expect(root.ancestorPaths(toDescendantAtPath: "/elsewhere") == [])
+    }
+
+    @Test func ancestorPathsFromRootDoesNotDoubleSlash() {
+        let file = FileNode(name: "f.txt", path: "/Users/x/f.txt", size: 1, isDirectory: false)
+        let x = FileNode(name: "x", path: "/Users/x", size: 1, isDirectory: true, children: [file])
+        let users = FileNode(name: "Users", path: "/Users", size: 1, isDirectory: true, children: [x])
+        let root = FileNode(name: "/", path: "/", size: 1, isDirectory: true, children: [users])
+
+        #expect(root.ancestorPaths(toDescendantAtPath: "/Users/x/f.txt") == ["/Users", "/Users/x"])
+    }
 }

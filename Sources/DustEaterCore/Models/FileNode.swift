@@ -132,4 +132,28 @@ extension FileNode {
         }
         return current
     }
+
+    /// Every ancestor of `path` strictly between this node and `path` itself,
+    /// ordered root-first. Used by the sidebar to know which branches must be
+    /// open for `path` to have a visible row - the target is deliberately
+    /// excluded, since a node is visible once its *parent* is expanded.
+    ///
+    /// Derived from the path string rather than by walking `children`: the
+    /// caller only needs identifiers to expand, not the nodes themselves, and
+    /// this stays O(depth) with no tree traversal.
+    public func ancestorPaths(toDescendantAtPath path: String) -> [String] {
+        guard path != self.path, path.hasPrefix(self.path) else { return [] }
+
+        var relative = path.dropFirst(self.path.count)
+        if relative.first == "/" { relative = relative.dropFirst() }
+        guard !relative.isEmpty else { return [] }
+
+        var result: [String] = []
+        var current = self.path
+        for component in relative.split(separator: "/").dropLast() {
+            current = current.hasSuffix("/") ? current + component : current + "/" + component
+            result.append(current)
+        }
+        return result
+    }
 }
