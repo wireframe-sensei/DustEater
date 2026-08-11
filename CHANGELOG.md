@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-08-11
+
+### Added
+- **App Manager**: New feature to identify and uninstall leftover app data
+  - Detects installed apps and scans their associated data folders
+  - Shows storage usage per app including cache, support files, and preferences
+  - Identifies orphaned app folders (leftover data from uninstalled apps)
+  - Vendor-nested folder detection for Google, Microsoft, Adobe, JetBrains patterns
+  - Launch history integration to identify recently used apps
+- **Settings Panel**: New preferences UI for managing app removal
+  - Protected apps list - select apps to exclude from removal
+  - Settings persist across app sessions
+- **UI Improvements**
+  - Home screen heading now correctly displays "Dust Eater" (was "Disk Analyzer")
+  - App Manager card now matches disk/folder card sizing and is fully clickable
+
+### Fixed
+- **UI Dead Ends**: Multiple navigation dead ends fixed
+  - Error state and permission banner now have back-to-home buttons
+  - Idle scan state now has a cancel button
+  - Delete and cache clear failures now show user-facing alerts (previously silent)
+- **Sidebar Navigation**: Select a node from treemap and sidebar auto-expands to show it
+- **Toolbar Actions**: Per-item actions (Reveal in Finder, Copy Path, Delete) moved to toolbar for better sidebar space
+
+## [0.2.0] - 2026-08-09
+
+### Added
+- **Live Disk Capacity Refresh**: Disk usage updates automatically every 5 seconds
+- **Filesystem Change Detection**: FSEvents-based monitoring with "Rescan" prompt
+- **File Deletion**: Delete individual files with confirmation and protected-path safety checks
+- **System Cache Clearing**: Clear application caches with protected-path safety checks
+- **Retry State**: Home screen shows retry button when disk loading fails
+
+### Fixed
+- **Sidebar Navigation Rework**: Replaced OutlineGroup with hand-rolled FileOutlineRow
+  - Enables selecting nodes from treemap and auto-expanding sidebar to reveal them
+  - Fixes sidebar names rendering as "n...", "p...", "C..." at real depths
+- **Toolbar Navigation**: Real browser-style back/forward history replaces simple back button
+- **Dead End Prevention**: Added explicit navigation out of error, permission, and idle scan states
+
 ## [0.1.2] - 2026-08-09
 
 ### Fixed
