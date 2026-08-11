@@ -343,3 +343,22 @@ oversights - don't "fix" these without the user asking:
   was never actually protected despite looking like it was; fixed by
   listing the public form only. Don't re-add a `/private/...` entry here -
   it will silently never match.
+- **Vendor-shared data folders (Google/Chrome case).** Apps from companies
+  like Google, Microsoft, Adobe, and JetBrains often nest their per-app data
+  one level deeper inside a shared company folder - e.g.
+  `~/Library/Application Support/Google/Chrome` rather than
+  `~/Library/Application Support/com.google.Chrome`. `AppGrouper` and
+  `OrphanFinder` both use a vendor-name heuristic derived from the bundle
+  identifier's second dot-component (`com.google.Chrome` → `"google"`) to
+  detect and recurse into these folders when building related-item lists or
+  deciding whether a folder is orphaned. This heuristic is not perfect (a
+  third-party app could coincidentally match a vendor name) but is safe -
+  recursion only triggers for folders whose name matches a known installed
+  app's vendor. See `VendorFolderExpander.swift` and the test fixtures
+  `findRelatedStorageInVendorNestedFolders` / `ignoresLiveAppDataInVendorFolderWhileReportingOrphanSiblings`
+  for the full logic and examples.
+  **Known limitation:** The heuristic assumes the filesystem is case-insensitive
+  (the macOS default APFS/HFS+, not an opt-in case-sensitive APFS volume).
+  On a case-sensitive volume, a folder named `"Google"` would not match the
+  lowercased guess `"google"`. This is an accepted gap, not a bug - revisit
+  only if case-sensitive APFS volumes become common enough to matter.

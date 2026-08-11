@@ -61,6 +61,20 @@ public enum AppGrouper {
                 path: "\(home)/Library/Preferences/\(bundleIdentifier).plist",
                 category: .preferences
             ))
+
+            if let vendor = VendorFolderExpander.vendorName(fromBundleIdentifier: bundleIdentifier) {
+                let lastComponent = bundleIdentifier.split(separator: ".").last.map(String.init)
+                for productName in Set([lastComponent, displayName].compactMap { $0 }) {
+                    candidates.append(Candidate(
+                        path: "\(home)/Library/Application Support/\(vendor)/\(productName)",
+                        category: .applicationSupport
+                    ))
+                    candidates.append(Candidate(
+                        path: "\(home)/Library/Caches/\(vendor)/\(productName)",
+                        category: .caches
+                    ))
+                }
+            }
         }
         // Application Support conventionally keys off bundle ID, but a
         // number of (mostly older) apps use their display name instead.
@@ -83,7 +97,7 @@ public enum AppGrouper {
             for candidate in candidates {
                 group.addTask {
                     guard FileManager.default.fileExists(atPath: candidate.path) else { return nil }
-                    let size = await sizeOnDisk(atPath: candidate.path)
+                    let size = await StorageSizing.sizeOnDisk(atPath: candidate.path)
                     guard size > 0 else { return nil }
                     return RelatedStorageItem(category: candidate.category, path: candidate.path, size: size)
                 }
@@ -95,29 +109,15 @@ public enum AppGrouper {
             return items
         }
 
+        let lastOpenedDate = await AppLastUsedDateProvider.lastUsedDate(forAppAtPath: appNode.path)
+
         return AppDiskEntity(
             displayName: info.displayName,
             bundleIdentifier: info.bundleIdentifier,
             appPath: appNode.path,
             appBundleSize: appNode.size,
-            relatedItems: relatedItems
+            relatedItems: relatedItems,
+            lastOpenedDate: lastOpenedDate
         )
-    }
-
-    /// A single preferences `.plist` is a file, not a directory `DiskScanner`
-    /// can recurse into, so allocated size is read directly for those.
-    private static func sizeOnDisk(atPath path: String) async -> Int64 {
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { return 0 }
-
-        if !isDirectory.boolValue {
-            return (try? await BlockingIO.run {
-                let attributes = try FileManager.default.attributesOfItem(atPath: path)
-                return (attributes[.size] as? NSNumber)?.int64Value ?? 0
-            }) ?? 0
-        }
-
-        let scanner = DiskScanner()
-        return await scanner.scan(rootPath: path).size
     }
 }

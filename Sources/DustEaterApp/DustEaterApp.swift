@@ -11,6 +11,10 @@ struct DustEaterApp: App {
         }
         .defaultSize(width: 1200, height: 700)
         .windowToolbarStyle(.unified(showsTitle: true))
+
+        Settings {
+            SettingsView()
+        }
     }
 
     /// A packaged release `.app` already gets its icon from

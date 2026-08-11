@@ -35,13 +35,15 @@ public struct AppDiskEntity: Sendable, Identifiable {
     public let appPath: String
     public let appBundleSize: Int64
     public let relatedItems: [RelatedStorageItem]
+    public let lastOpenedDate: Date?
 
     public init(
         displayName: String,
         bundleIdentifier: String?,
         appPath: String,
         appBundleSize: Int64,
-        relatedItems: [RelatedStorageItem]
+        relatedItems: [RelatedStorageItem],
+        lastOpenedDate: Date? = nil
     ) {
         self.id = bundleIdentifier ?? appPath
         self.displayName = displayName
@@ -49,6 +51,7 @@ public struct AppDiskEntity: Sendable, Identifiable {
         self.appPath = appPath
         self.appBundleSize = appBundleSize
         self.relatedItems = relatedItems
+        self.lastOpenedDate = lastOpenedDate
     }
 
     public var relatedTotalSize: Int64 {

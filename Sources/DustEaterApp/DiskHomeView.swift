@@ -29,6 +29,7 @@ struct DiskHomeView: View {
     @State private var hasLoadedOnce = false
     let onSelectDisk: (String) -> Void
     let onSelectCustomFolder: () -> Void
+    let onOpenAppManager: () -> Void
 
     var body: some View {
         ZStack {
@@ -45,7 +46,7 @@ struct DiskHomeView: View {
                             .foregroundStyle(Color.accentColor)
 
                         VStack(spacing: 6) {
-                            Text("Disk Analyzer")
+                            Text("Dust Eater")
                                 .font(.largeTitle.bold())
                             Text("Choose a disk or folder to analyze")
                                 .font(.title3)
@@ -125,6 +126,7 @@ struct DiskHomeView: View {
                                 }
 
                                 CustomFolderCardView(onTap: onSelectCustomFolder)
+                                AppManagerCardView(onTap: onOpenAppManager)
                             }
                             .controlSize(.extraLarge)
                             .padding(20)
@@ -354,6 +356,7 @@ struct DiskCardView: View {
 #Preview {
     DiskHomeView(
         onSelectDisk: { _ in },
-        onSelectCustomFolder: {}
+        onSelectCustomFolder: {},
+        onOpenAppManager: {}
     )
 }

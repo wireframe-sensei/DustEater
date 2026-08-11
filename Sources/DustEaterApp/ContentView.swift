@@ -3,11 +3,17 @@ import AppKit
 import DustEaterCore
 
 struct ContentView: View {
+    private enum TopLevelScreen: Equatable {
+        case home
+        case scanFlow
+        case appManager
+    }
+
+    @State private var screen: TopLevelScreen = .home
     @State private var coordinator = ScanCoordinator()
     @State private var selectedPath: String?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var selectedTheme: ColorTheme = .weighted
-    @State private var isOnHome = true
     @State private var totalDiskSize: Int64 = 0
     // Plain reference type held for stable identity across body
     // re-evaluations (same pattern as `coordinator` above) - its internal
@@ -24,63 +30,67 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            if isOnHome {
-                DiskHomeView(
-                    onSelectDisk: { path in
-                        startScan(path: path)
-                    },
-                    onSelectCustomFolder: {
-                        chooseFolder()
-                    }
-                )
-            } else {
-                switch coordinator.state {
-                case .idle:
-                    // Normally brief (probing access before the real scan
-                    // starts) and paired with `isOnHome` flipping back to
-                    // true wherever `.idle` gets set today, so this Cancel
-                    // is a safety net rather than something expected to be
-                    // pressed - but nothing in the types enforces that
-                    // pairing, so a future code path that lands here without
-                    // also resetting `isOnHome` must not strand the user on
-                    // a bare spinner with no way out.
-                    VStack(spacing: 16) {
-                        ProgressView()
-                        Text("Preparing scan...")
-                            .foregroundStyle(.secondary)
-                        Button("Cancel") {
-                            coordinator.cancelScan()
-                            backToHome()
-                        }
-                        .font(.control)
-                        .buttonStyle(.bordered)
-                    }
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .scanning(let progress):
-                    ScanningStateView(progress: progress, totalDiskSize: totalDiskSize, onCancel: {
+        switch screen {
+        case .home:
+            DiskHomeView(
+                onSelectDisk: { path in
+                    startScan(path: path)
+                },
+                onSelectCustomFolder: {
+                    chooseFolder()
+                },
+                onOpenAppManager: {
+                    screen = .appManager
+                }
+            )
+        case .scanFlow:
+            switch coordinator.state {
+            case .idle:
+                // Normally brief (probing access before the real scan
+                // starts) and paired with `screen` flipping back to
+                // `.home` wherever `.idle` gets set today, so this Cancel
+                // is a safety net rather than something expected to be
+                // pressed - but nothing in the types enforces that
+                // pairing, so a future code path that lands here without
+                // also resetting `screen` must not strand the user on
+                // a bare spinner with no way out.
+                VStack(spacing: 16) {
+                    ProgressView()
+                    Text("Preparing scan...")
+                        .foregroundStyle(.secondary)
+                    Button("Cancel") {
                         coordinator.cancelScan()
                         backToHome()
-                    })
-                case .finished(let root):
-                    MainContentView(
-                        root: root,
-                        selectedPath: $selectedPath,
-                        coordinator: coordinator,
-                        treemapRects: treemapRects(for:),
-                        columnVisibility: $columnVisibility,
-                        selectedTheme: $selectedTheme,
-                        treemapCache: treemapCache,
-                        onBackToHome: backToHome,
-                        onRescan: { startScan(path: root.path) }
-                    )
-                case .needsFullDiskAccess(let path):
-                    PermissionBannerView(path: path, onBackToHome: backToHome)
-                case .failed(let message):
-                    ErrorStateView(message: message, onBackToHome: backToHome)
+                    }
+                    .font(.control)
+                    .buttonStyle(.bordered)
                 }
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .scanning(let progress):
+                ScanningStateView(progress: progress, totalDiskSize: totalDiskSize, onCancel: {
+                    coordinator.cancelScan()
+                    backToHome()
+                })
+            case .finished(let root):
+                MainContentView(
+                    root: root,
+                    selectedPath: $selectedPath,
+                    coordinator: coordinator,
+                    treemapRects: treemapRects(for:),
+                    columnVisibility: $columnVisibility,
+                    selectedTheme: $selectedTheme,
+                    treemapCache: treemapCache,
+                    onBackToHome: backToHome,
+                    onRescan: { startScan(path: root.path) }
+                )
+            case .needsFullDiskAccess(let path):
+                PermissionBannerView(path: path, onBackToHome: backToHome)
+            case .failed(let message):
+                ErrorStateView(message: message, onBackToHome: backToHome)
             }
+        case .appManager:
+            AppManagerView(onBackToHome: backToHome)
         }
     }
 
@@ -88,12 +98,12 @@ struct ContentView: View {
     /// point - `MainContentView`'s toolbar, and the two terminal failure
     /// screens below, which previously had no way back at all.
     private func backToHome() {
-        isOnHome = true
+        screen = .home
         selectedPath = nil
     }
 
     private func startScan(path: String) {
-        isOnHome = false
+        screen = .scanFlow
         selectedPath = nil
         coordinator.zoomNode = nil
 
@@ -117,7 +127,7 @@ struct ContentView: View {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        isOnHome = false
+        screen = .scanFlow
         selectedPath = nil
         coordinator.zoomNode = nil
 
@@ -525,7 +535,7 @@ struct MainContentView: View {
                     } label: {
                         Label("Reveal in Finder", systemImage: "folder")
                     }
-                    .disabled(selectedNode == nil)
+                    .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
                     .help("Reveal the selected item in Finder")
 
                     Button {
@@ -533,7 +543,7 @@ struct MainContentView: View {
                     } label: {
                         Label("Copy Path", systemImage: "doc.on.doc")
                     }
-                    .disabled(selectedNode == nil)
+                    .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
                     .help("Copy the selected item's full path")
 
                     Button(role: .destructive) {
@@ -542,7 +552,7 @@ struct MainContentView: View {
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
-                    .disabled(selectedNode.map { !FileOperations.canDelete(at: $0.path) } ?? true)
+                    .disabled((selectedNode?.isSyntheticGroupingNode ?? false) || selectedNode.map { !FileOperations.canDelete(at: $0.path) } ?? true)
                     .help("Move the selected item to the Trash, or delete it permanently")
                 }
 

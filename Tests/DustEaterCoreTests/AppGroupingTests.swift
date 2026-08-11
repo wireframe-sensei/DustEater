@@ -140,4 +140,43 @@ struct AppGroupingTests {
 
         #expect(merged.size == scannedRoot.size)
     }
+
+    @Test func findRelatedStorageInVendorNestedFolders() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try writeInfoPlist(
+            bundleIdentifier: "com.acme.widget",
+            displayName: "Widget",
+            appPath: "Applications/Widget.app",
+            in: root
+        )
+        try write(1000, to: "Applications/Widget.app/Contents/MacOS/Widget", in: root)
+        try write(500, to: "Library/Application Support/acme/Widget/config.json", in: root)
+        try write(2000, to: "Library/Caches/acme/Widget/cache.db", in: root)
+
+        let scanner = DiskScanner()
+        let node = await scanner.scan(rootPath: root.appendingPathComponent("Applications").path)
+        let apps = AppGrouper.findAppBundles(in: node)
+
+        let entities = await AppGrouper.buildAppDiskEntities(from: apps, homeDirectory: root.path)
+        #expect(entities.count == 1)
+
+        let entity = try #require(entities.first)
+        #expect(entity.bundleIdentifier == "com.acme.widget")
+
+        let categoriesFound = Set(entity.relatedItems.map(\.category))
+        #expect(categoriesFound == [.applicationSupport, .caches])
+
+        let appSupportItem = entity.relatedItems.first { $0.category == .applicationSupport }
+        #expect(appSupportItem != nil, "Should find Application Support item")
+        #expect(appSupportItem?.size ?? 0 > 0)
+
+        let cachesItem = entity.relatedItems.first { $0.category == .caches }
+        #expect(cachesItem != nil, "Should find Caches item")
+        #expect(cachesItem?.size ?? 0 > 0)
+
+        #expect(entity.relatedTotalSize > 0)
+        #expect(entity.trueTotalSize == entity.appBundleSize + entity.relatedTotalSize)
+    }
 }

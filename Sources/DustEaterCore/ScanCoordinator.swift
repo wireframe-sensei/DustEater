@@ -71,16 +71,24 @@ public final class ScanCoordinator {
 
             guard !Task.isCancelled else { return }
 
+            var mergedNode = node
+            let appNodes = AppGrouper.findAppBundles(in: node)
+            if !appNodes.isEmpty {
+                let apps = await AppGrouper.buildAppDiskEntities(from: appNodes)
+                guard !Task.isCancelled else { return }
+                mergedNode = AppSizeMerger.mergeTrueSizes(into: node, using: apps)
+            }
+
             // Calculate scan duration
             if let startTime = self.scanStartTime {
                 let endTime = DispatchTime.now()
                 self.scanDuration = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000_000
                 debugLog("📊 Total scan time: \(String(format: "%.3f", self.scanDuration))s")
-                debugLog("📊 Items found: \(node.itemCount)")
-                debugLog("📊 Total size: \(ByteFormatter.string(fromBytes: node.size))")
+                debugLog("📊 Items found: \(mergedNode.itemCount)")
+                debugLog("📊 Total size: \(ByteFormatter.string(fromBytes: mergedNode.size))")
             }
 
-            self.state = .finished(node)
+            self.state = .finished(mergedNode)
 
             // Watch the original scan root, not `zoomNode` - the signal
             // needs to stay correct regardless of how deep the user has

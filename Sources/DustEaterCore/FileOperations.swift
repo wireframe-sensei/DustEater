@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 public struct FileOperations {
     // `/var`, `/etc`, and `/tmp` are the public symlinks to `/private/var`,
@@ -78,6 +79,47 @@ public struct FileOperations {
     private static func moveToTrash(at path: String) throws {
         let url = URL(fileURLWithPath: path)
         try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    }
+
+    /// True only for a direct child of `/Applications` or `~/Applications`
+    /// whose name ends in `.app`. Nested bundles (e.g. helper apps inside
+    /// Xcode.app) and `/System/Applications` (not a direct child of
+    /// `/Applications`) are excluded by construction.
+    public static func canDeleteAppBundle(at path: String) -> Bool {
+        let normalizedPath = (path as NSString).standardizingPath
+        guard normalizedPath.hasSuffix(".app") else { return false }
+
+        let parent = (normalizedPath as NSString).deletingLastPathComponent
+        let allowedParents = [
+            "/Applications",
+            (NSHomeDirectory() as NSString).appendingPathComponent("Applications"),
+        ]
+        return allowedParents.contains(parent)
+    }
+
+    public static func deleteAppBundle(at path: String, permanently: Bool = false) throws {
+        guard canDeleteAppBundle(at: path) else {
+            throw FileOperationError.systemProtected
+        }
+
+        if permanently {
+            try FileManager.default.removeItem(atPath: path)
+        } else {
+            try moveToTrash(at: path)
+        }
+    }
+
+    public static func isAppRunning(bundleIdentifier: String) -> Bool {
+        NSWorkspace.shared.runningApplications.contains { app in
+            app.bundleIdentifier == bundleIdentifier
+        }
+    }
+
+    public static func terminateApp(bundleIdentifier: String) -> Bool {
+        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+            return false
+        }
+        return app.terminate()
     }
 
     public static func clearSystemCaches() throws {

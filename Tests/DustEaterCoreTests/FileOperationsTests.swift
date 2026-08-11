@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import DustEaterCore
 
@@ -52,5 +53,35 @@ struct FileOperationsTests {
         #expect(!FileOperations.canDelete(at: "/Users/someone/Downloads"))
         #expect(FileOperations.canDelete(at: "/Users/someone/Downloads/installer.dmg"))
         #expect(FileOperations.canDelete(at: "/Users/someone/Projects"))
+    }
+
+    /// canDeleteAppBundle allows direct children of /Applications ending in .app
+    @Test func canDeleteAppBundleAllowsDirectApplicationsChildren() {
+        #expect(FileOperations.canDeleteAppBundle(at: "/Applications/Safari.app"))
+        #expect(FileOperations.canDeleteAppBundle(at: "/Applications/MyApp.app"))
+    }
+
+    /// canDeleteAppBundle allows direct children of ~/Applications ending in .app
+    @Test func canDeleteAppBundleAllowsHomeApplicationsChildren() {
+        let homeDir = NSHomeDirectory()
+        let appPath = (homeDir as NSString).appendingPathComponent("Applications/MyApp.app")
+        #expect(FileOperations.canDeleteAppBundle(at: appPath))
+    }
+
+    /// canDeleteAppBundle rejects nested bundles (e.g. helper apps inside Xcode.app)
+    @Test func canDeleteAppBundleRejectsNestedBundles() {
+        #expect(!FileOperations.canDeleteAppBundle(at: "/Applications/Xcode.app/Contents/XPCServices/Helper.app"))
+    }
+
+    /// canDeleteAppBundle rejects paths not ending in .app
+    @Test func canDeleteAppBundleRejectsNonAppPaths() {
+        #expect(!FileOperations.canDeleteAppBundle(at: "/Applications/Safari"))
+        #expect(!FileOperations.canDeleteAppBundle(at: "/Applications/MyFolder"))
+    }
+
+    /// canDeleteAppBundle rejects /System/Applications children
+    /// (they're not direct children of /Applications)
+    @Test func canDeleteAppBundleRejectsSystemApplications() {
+        #expect(!FileOperations.canDeleteAppBundle(at: "/System/Applications/Notes.app"))
     }
 }
