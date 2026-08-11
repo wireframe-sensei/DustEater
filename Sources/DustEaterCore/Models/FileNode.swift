@@ -68,6 +68,43 @@ extension FileNode {
         return copy
     }
 
+    /// Removes a node at the given path and updates parent sizes.
+    /// Returns an updated tree, or nil if the path doesn't exist.
+    public func removingNode(atPath pathToRemove: String) -> FileNode? {
+        guard pathToRemove != self.path else { return nil }
+        guard pathToRemove.hasPrefix(self.path) else { return nil }
+
+        var updated = self
+        let deletedSize = findNodeSize(atPath: pathToRemove)
+
+        updated.children = children.compactMap { child in
+            if child.path == pathToRemove {
+                return nil
+            }
+            if pathToRemove.hasPrefix(child.path + "/") {
+                return child.removingNode(atPath: pathToRemove)
+            }
+            return child
+        }
+
+        updated.size = max(0, updated.size - deletedSize)
+        updated.itemCount = max(0, updated.itemCount - 1)
+
+        return updated
+    }
+
+    private func findNodeSize(atPath path: String) -> Int64 {
+        if self.path == path {
+            return self.size
+        }
+        for child in children {
+            if path.hasPrefix(child.path) {
+                return child.findNodeSize(atPath: path)
+            }
+        }
+        return 0
+    }
+
     /// Looks up a descendant by its full path, descending one path component
     /// at a time and matching by `name` - rather than scanning the whole
     /// tree (the old `find(path:)`) or maintaining a separate `path → node`
