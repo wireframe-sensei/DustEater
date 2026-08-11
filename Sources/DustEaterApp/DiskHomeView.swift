@@ -21,6 +21,12 @@ struct DiskInfo: Identifiable {
 
 struct DiskHomeView: View {
     @State private var disks: [DiskInfo] = []
+    // Distinguishes "still loading" from "loaded, found nothing" - without
+    // this, a machine where `mountedVolumeURLs` returns nil or every volume
+    // gets filtered out shows "Loading disks..." forever with no retry and
+    // no way to reach `CustomFolderCardView`, which used to live inside the
+    // same `else` branch as the disk grid and so was unreachable too.
+    @State private var hasLoadedOnce = false
     let onSelectDisk: (String) -> Void
     let onSelectCustomFolder: () -> Void
 
@@ -71,7 +77,7 @@ struct DiskHomeView: View {
                 .glassBackground(.ultraThinMaterial, cornerRadius: 16)
                 .padding(20)
 
-                if disks.isEmpty {
+                if !hasLoadedOnce {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Loading disks...")
@@ -83,6 +89,30 @@ struct DiskHomeView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 16) {
+                            if disks.isEmpty {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .font(.system(size: 32))
+                                        .foregroundStyle(.secondary)
+                                    Text("No disks found")
+                                        .font(.headline)
+                                    Text("You can still browse a specific folder below, or try again.")
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                    Button("Retry", action: loadDisks)
+                                        .font(.control)
+                                        .buttonStyle(.bordered)
+                                        .padding(.top, 4)
+                                }
+                                .padding(.top, 20)
+                            }
+
+                            // `CustomFolderCardView` deliberately sits outside
+                            // the `disks.isEmpty` branch above: it doesn't
+                            // depend on volume enumeration at all, so it must
+                            // stay reachable even when no disks were found -
+                            // otherwise a machine with zero visible volumes
+                            // would have no way to proceed past this screen.
                             let columns = [
                                 GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 16)
                             ]
@@ -108,13 +138,40 @@ struct DiskHomeView: View {
         .onAppear {
             loadDisks()
         }
+        // Structured concurrency, not a `Timer`: this loop starts when
+        // `DiskHomeView` appears and is cancelled automatically the moment
+        // it leaves the view hierarchy (when `isOnHome` flips to `false` in
+        // `ContentView`, the `if isOnHome { DiskHomeView(...) }` branch is
+        // torn down, not just hidden) - so it never runs while a scan is
+        // showing.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                loadDisks()
+            }
+        }
+        // Mount/unmount/rename fire immediately, so plugging in or ejecting
+        // a drive feels instant rather than waiting for the next poll.
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)) { _ in
+            loadDisks()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)) { _ in
+            loadDisks()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didRenameVolumeNotification)) { _ in
+            loadDisks()
+        }
     }
 
     private func loadDisks() {
+        defer { hasLoadedOnce = true }
+
         var diskList: [DiskInfo] = []
         let fileManager = FileManager.default
 
         guard let urls = fileManager.mountedVolumeURLs(includingResourceValuesForKeys: nil) else {
+            disks = []
             return
         }
 
