@@ -38,6 +38,7 @@ public struct PhysicalDiskHealth: Sendable, Identifiable {
     public let wearLevelPercent: Double?
     public let totalBytesWritten: Int64?
     public let totalCapacity: Int64
+    public let availableCapacity: Int64
     public let purgeableBytes: Int64
     public let localSnapshotCount: Int
     public let isAPFS: Bool
@@ -79,6 +80,7 @@ public struct PhysicalDiskHealth: Sendable, Identifiable {
         wearLevelPercent: Double? = nil,
         totalBytesWritten: Int64? = nil,
         totalCapacity: Int64,
+        availableCapacity: Int64,
         purgeableBytes: Int64,
         localSnapshotCount: Int,
         isAPFS: Bool
@@ -95,6 +97,7 @@ public struct PhysicalDiskHealth: Sendable, Identifiable {
         self.wearLevelPercent = wearLevelPercent
         self.totalBytesWritten = totalBytesWritten
         self.totalCapacity = totalCapacity
+        self.availableCapacity = availableCapacity
         self.purgeableBytes = purgeableBytes
         self.localSnapshotCount = localSnapshotCount
         self.isAPFS = isAPFS

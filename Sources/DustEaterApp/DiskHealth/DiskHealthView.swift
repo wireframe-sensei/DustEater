@@ -154,7 +154,7 @@ struct DiskHealthView: View {
 
                     HealthGaugeView(
                         title: "Storage Used",
-                        value: disk.totalCapacity > 0 ? Double(max(0, disk.totalCapacity - disk.purgeableBytes)) / Double(disk.totalCapacity) * 100 : nil,
+                        value: disk.totalCapacity > 0 ? Double(disk.totalCapacity - disk.availableCapacity) / Double(disk.totalCapacity) * 100 : nil,
                         status: disk.purgeableBytes > 100_000_000 ? .warning : .passed
                     )
                 }

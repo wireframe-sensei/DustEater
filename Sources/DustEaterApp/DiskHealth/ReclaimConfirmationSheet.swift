@@ -112,6 +112,7 @@ struct ReclaimConfirmationSheet: View {
             interconnect: .internal,
             smartStatus: .verified,
             totalCapacity: 1_000_000_000_000,
+            availableCapacity: 100_000_000_000,
             purgeableBytes: 50_000_000_000,
             localSnapshotCount: 12,
             isAPFS: true

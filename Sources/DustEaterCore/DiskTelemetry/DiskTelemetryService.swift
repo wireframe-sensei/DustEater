@@ -127,6 +127,7 @@ public final class DiskTelemetryService {
             let isSystemDisk = IORegistryDiskReader.isSystemDisk(bsdName: bsdName, forPath: path)
 
             let totalCapacity = capacitySnapshot?.totalCapacity ?? 0
+            let availableCapacity = capacitySnapshot?.availableCapacity ?? 0
             let purgeableBytes = capacitySnapshot.map { APFSVolumeMetrics.purgeableBytes(from: $0) } ?? 0
 
             let health = PhysicalDiskHealth(
@@ -141,6 +142,7 @@ public final class DiskTelemetryService {
                 wearLevelPercent: nil,
                 totalBytesWritten: nil,
                 totalCapacity: totalCapacity,
+                availableCapacity: availableCapacity,
                 purgeableBytes: purgeableBytes,
                 localSnapshotCount: snapshotCount,
                 isAPFS: isAPFS
