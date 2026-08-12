@@ -41,7 +41,15 @@ enum APFSVolumeMetrics {
         guard statfs(path, &statBuf) == 0 else {
             return nil
         }
-        let fsType = String(cString: &statBuf.f_fstypename.0)
+
+        let nameArray = withUnsafeBytes(of: statBuf.f_fstypename) { bytes in
+            bytes.prefix(while: { $0 != 0 }).map { $0 }
+        }
+
+        guard let fsType = String(bytes: nameArray, encoding: .utf8) else {
+            return nil
+        }
+
         return fsType.isEmpty ? nil : fsType
     }
 
