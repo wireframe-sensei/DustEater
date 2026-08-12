@@ -30,6 +30,7 @@ struct DiskHomeView: View {
     let onSelectDisk: (String) -> Void
     let onSelectCustomFolder: () -> Void
     let onOpenAppManager: () -> Void
+    let onOpenDiskHealth: () -> Void
 
     var body: some View {
         ZStack {
@@ -126,6 +127,7 @@ struct DiskHomeView: View {
                                 }
 
                                 CustomFolderCardView(onTap: onSelectCustomFolder)
+                                DiskHealthCardView(onTap: onOpenDiskHealth)
                                 AppManagerCardView(onTap: onOpenAppManager)
                             }
                             .controlSize(.extraLarge)
@@ -357,6 +359,7 @@ struct DiskCardView: View {
     DiskHomeView(
         onSelectDisk: { _ in },
         onSelectCustomFolder: {},
-        onOpenAppManager: {}
+        onOpenAppManager: {},
+        onOpenDiskHealth: {}
     )
 }

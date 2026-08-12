@@ -17,6 +17,10 @@ let package = Package(
             name: "DustEaterCore",
             swiftSettings: [
                 .swiftLanguageMode(.v6)
+            ],
+            linkerSettings: [
+                .linkedFramework("IOKit"),
+                .linkedFramework("DiskArbitration")
             ]
         ),
         .executableTarget(

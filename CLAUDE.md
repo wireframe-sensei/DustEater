@@ -362,3 +362,38 @@ oversights - don't "fix" these without the user asking:
   On a case-sensitive volume, a folder named `"Google"` would not match the
   lowercased guess `"google"`. This is an accepted gap, not a bug - revisit
   only if case-sensitive APFS volumes become common enough to matter.
+- **Disk Health & System Telemetry module (`Sources/DustEaterCore/DiskTelemetry/`):**
+  - **Raw IOKit/DiskArbitration/SMC calls are not unit tested.** These APIs touch
+    hardware, depend on real device presence and OS state, and are synchronous
+    blocking calls from an `@MainActor` service. The pattern matches the
+    existing `FileSystemWatcher` precedent (documented above): integration
+    testing at `swift run` time is practical and done manually; automated
+    unit tests don't mock these APIs. Pure logic around them - purgeable-space
+    arithmetic, health-status rollup evaluator - *is* unit-tested via
+    dependency injection (see `APFSVolumeMetricsTests.swift`,
+    `PhysicalDiskHealthTests.swift`).
+  - **Wear-level % and total bytes written show "Not Available on This Mac"**
+    rather than blank/nil/guessed numbers on virtually all Apple Silicon Macs
+    and most external/USB drives. This is not a bug or a missing feature - it
+    reflects Apple's platform restriction: no public non-entitled API exposes
+    these metrics. The few tools that claim to read them (like smartctl) are
+    also blocked on Apple Silicon. DustEater is ad-hoc signed with no path to
+    the private entitlements that would be required. When revisit: only if
+    Apple opens up a public API, or if the app ships with a Developer ID
+    certificate and the accompanying privileged helper infrastructure.
+  - **Purgeable-space reclaim uses an AppleScript admin-password prompt,** not
+    a privileged-helper daemon (SMJobBless/SMAppService). DustEater has no
+    Developer ID cert (CLAUDE.md:213-218), so a persistent daemon isn't
+    shippable. The shipped mechanism shells out to `tmutil
+    thinlocalsnapshots` wrapped in `do shell script ... with administrator
+    privileges` - standard macOS password dialog UX, same as Disk Utility's
+    "Repair Disk". Real forced reclaim happens on each action. When revisit:
+    if the app ever gets a Developer ID cert, consider a proper privileged
+    helper for smoother UX (no password prompt per action).
+  - **SMC temperature sensor key probing is best-effort.** The open-source
+    technique used here (iStat Menus/TG Pro pattern, IOKit calls + struct
+    definitions from community documentation) works on most Macs but has no
+    official Apple blessing. It may fail silently on models where Apple chose
+    a different sensor key name or sensor hierarchy. All failures fall through
+    to "Unavailable" gracefully. When revisit: only if/when Apple publishes
+    an official temperature API.
