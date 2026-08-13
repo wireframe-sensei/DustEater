@@ -651,3 +651,164 @@ oversights - don't "fix" these without the user asking:
     bright photo. Don't "simplify" it back to `.palette` without checking
     that both `circle` and `checkmark.circle.fill` actually have matching
     layer counts.
+- **Developer & Creative Power-User Clean Up Kit
+  (`Sources/DustEaterCore/DeveloperKit/`, `Sources/DustEaterApp/DeveloperKit/`):**
+  - **`PurgeSafetyLevel` has four cases, not the three originally briefed** -
+    `.safe`, `.rebuildable`, `.caution`, and `.reportOnly`. The fourth exists
+    so "a Docker card with a delete button" is unrepresentable in the type,
+    not merely discouraged in the view: Docker's `Docker.raw`, mounted
+    Simulator runtime volumes, and Final Cut Pro/Logic Pro library contents
+    genuinely have no safe deletion path from outside their owning app, so
+    they're sized and explained but never offered a toggle at all -
+    `TargetCardView`'s `footer` branches on `.reportOnly` to render Reveal
+    in Finder plus a hint instead of a `Toggle`, and `PurgeSelection.toggle`
+    refuses `.reportOnly` a second time at the data layer as a hard backstop
+    independent of what the view happens to render.
+  - **iOS Simulator runtimes are report-only, and this isn't a conservative
+    default - they're not deletable at all through this app.** Verified
+    directly (not assumed): downloaded runtimes are a single root-owned DMG
+    under `/Library/Developer/CoreSimulator/Images`, currently mounted
+    read-only as an APFS cryptex volume. That's triply blocked - prefix-
+    blocked by `FileOperations.isSystemProtected` (`/Library`), root-owned,
+    and an active mount `rm` can't touch even with permission. `simctl
+    runtime delete` is the only real path, surfaced as the hint text.
+  - **Adobe scratch-disk locations are not auto-located, and this was a
+    deliberate stop, not a gap to fill in later.** Photoshop's scratch
+    config lives in a binary `.psp` inside `Adobe Photoshop <version>
+    Settings/`, an undocumented format not worth reverse-engineering.
+    Premiere's prefs are readable XML but every verified value was the
+    sentinel `SameAsProject` - meaning render files sit next to whatever
+    project created them, at a path this app has no way to know. Fixed
+    Adobe cache paths (Media Cache Files, Peak Files, etc.) are in
+    `PurgeCatalog.definitions` as normal; project-local Premiere preview
+    folders are instead *discovered* from the scanned tree by name
+    (`PurgeCatalog.discoveredDefinition`), the same mechanism used for
+    `node_modules`/Cargo `target`. A Photoshop `Photoshop Temp*` scratch-file
+    sweep was scoped and then deliberately cut before implementation: those
+    files sit at the root of whatever volume Photoshop was scratching to,
+    not under one project folder, and representing "a set of loose sibling
+    files matched by name prefix" doesn't fit `PurgeTargetDefinition`'s
+    one-path-per-target shape without real complexity for a feature that,
+    per the brief, only ever matters after a crash. Revisit as its own
+    scoped feature if it turns out to matter in practice, not by bending
+    `PurgeTargetDefinition` to fit it.
+  - **Final Cut Pro and Logic Pro are report-only, and their exact internal
+    folder names (`Render Files`, `Transcoded Media`, `Freeze Files`, `Undo
+    Data`) are unverified** - neither app is installed on the machine this
+    was built on. `PurgeCatalog.fcpBundleTarget`/`.logicxBundleTarget` sum
+    those specific subfolder names if present and report zero (rendering no
+    card at all, per `DeveloperKitView`'s zero-byte filter) if the guessed
+    names don't match a real installation - a wrong guess costs a missing
+    number, never an attempted deletion, since these are report-only
+    regardless. Deleting Final Cut render files from outside the app is
+    *roughly* what its own "Delete Generated Library Files" does, but
+    `Transcoded Media` can be the only viewable copy once original camera
+    media goes offline, and this app has no way to tell which case it is -
+    Final Cut does. When to revisit: only after verifying folder names
+    against a real Final Cut/Logic install, and even then, Final Cut's own
+    render-cleanup command stays the recommended hint text over this app
+    attempting the delete itself.
+  - **`BundleProtection`'s suffix list gained `.fcpbundle`, `.imovielibrary`,
+    `.theater`, `.tvlibrary`, `.logicx`, `.band`** as part of this module,
+    not incidentally - `"Wedding.fcpbundle".hasSuffix(".bundle")` is `false`,
+    so before this fix the duplicate and large-file inspectors could offer
+    individual files inside a Final Cut/iMovie/TV/Logic/GarageBand library
+    for deletion, the same class of risk `.app`/`.framework` protection
+    already covered. This was shipped as its own standalone commit ahead of
+    the rest of the module, since it's a real fix independent of everything
+    else here.
+  - **Trash-vs-Permanent button prominence is inverted from
+    `DuplicateCleanConfirmationSheet`, on purpose.** There, Move to Trash is
+    the prominent default. Here, `PurgeConfirmationSheet.actionButtons`
+    makes Delete Permanently prominent whenever the selection is only
+    `.safe`/`.rebuildable`, and only swaps to Trash-prominent once a
+    `.caution` target is included. Reasoning: moving 40 GB of DerivedData to
+    the Trash frees zero bytes until the Trash is emptied, and the Trash
+    sits on the *same volume* - the entire point of this screen is freeing
+    space *now*, and every `.safe`/`.rebuildable` target is regenerable by
+    definition, so the safety net Trash provides is worth less here than the
+    friction it costs. A `.caution` target has no such regeneration
+    guarantee, so it gets the same Trash-first treatment as every other
+    destructive action in the app. Both buttons always exist regardless;
+    only which one is `.borderedProminent` changes.
+  - **`SafetyBadge` draws a literal `Capsule()`, not
+    `metrics.buttonShape`.** `ControlMetrics.isCapsule` (`MacOSDesignTokens.swift`)
+    governs controls that draw themselves as compact buttons - at
+    Large/ExtraLarge control size it becomes `true`, which would turn a
+    small static badge into an oversized pill. A badge isn't a button, so it
+    intentionally sits outside that system, the same way `DiskCardView`
+    deliberately reads only `metrics.cornerRadius` and ignores `isCapsule`
+    for its own, different reason (see the Design system conventions
+    section above). Don't "fix" this to route through `ControlMetrics`.
+  - **`DuplicateDetector.withConcurrentTasks` was not promoted to shared
+    infrastructure for `PurgeScanner`'s fallback measuring, even though both
+    need bounded concurrency.** `PurgeScanner.measure(_:addingTo:totalTargets:)`
+    instead has its own ~15-line inline sliding window capped at 4. Two
+    reasons, not one: promoting a `private`, carefully doc-commented method
+    to `public` on its *second* use is exactly what CLAUDE.md's Rule of
+    Three (see the AI Assistant Coding Guidelines section above) exists to
+    prevent, and the actual shapes differ - `withConcurrentTasks` slides
+    across tens of thousands of leaf file reads inside an actor, while
+    `PurgeScanner`'s version bounds at most a couple dozen `DiskScanner.scan`
+    calls, each of which is *itself* an unbounded recursive fan-out
+    (`DiskScanner.swift`'s own documented reasoning) - ten of those running
+    concurrently would be ten unbounded fan-outs at once, which is why the
+    cap is a real 4, not a cosmetic one.
+  - **`PurgeCategory.grouped(_:)` lives in Core and is `public`, used by both
+    `PurgeScanner` (building the final `.loaded` state) and
+    `DeveloperKitView` (grouping the partial `measured` array shown mid-scan
+    for streaming cards) - this is the one grouping helper in the module
+    that *was* promoted, deliberately, unlike `withConcurrentTasks` above.**
+    The difference: this one has two real call sites that need the *exact*
+    same grouping today, not a hypothetical third, and duplicating six lines
+    of `filter`/`sort` across a Core service and a SwiftUI view is the kind
+    of drift Rule of Three is meant to prevent once there's already a second
+    real caller, not just a first.
+  - **Xcode Archives never becomes a bulk-selectable `PurgeTarget`, on
+    purpose - it's the one category with its own dedicated drill-in list**
+    (`XcodeArchiveLister`, `XcodeArchivesListView`). An `.xcarchive` holds
+    the dSYM needed to symbolicate a crash report from a build that may have
+    shipped; once deleted there's no way back, since rebuilding produces a
+    different UUID, not a replacement for the one that's gone. A `.caution`
+    badge on a single bulk toggle was judged insufficient friction for a
+    one-click, irreversible action with zero regeneration path - so instead
+    the Xcode category surfaces an `ArchivesSummaryCardView` with a "Browse
+    Archives" button (not a toggle) that opens a per-archive list, and
+    deletion happens one archive at a time through the same Trash/Permanent
+    alert pattern `MainContentView` already uses for a single selected item.
+    `XcodeArchiveLister.listArchives` reads structure and size entirely from
+    the already-scanned tree (`root.node(atPath:)` on the Archives folder,
+    two levels of children) and returns empty rather than falling back to a
+    fresh directory walk if Archives wasn't part of the scan - reusing
+    `root` everywhere in this module exists specifically to avoid a second
+    Full Disk Access prompt, and a silent fallback walk here would quietly
+    defeat that. Each archive's `Info.plist` (a few hundred bytes) is still
+    read from disk for its app name and creation date, since that's real
+    file content `FileNode` never carries - falls back to the folder name
+    if the plist is missing or unreadable, rather than dropping the archive
+    from the list entirely.
+  - **`PurgeCatalog.isDenied` is a hard refusal layered on top of
+    `FileOperations.canDelete`, not a replacement for it** - three paths
+    unprotected by anything else in the app: `~/Music/Audio Music Apps`
+    (user sampler instruments, patches, and **recorded audio** - nothing in
+    `FileOperations.isSystemProtected` covers this today),
+    `~/Library/Developer/Xcode/UserData` (code snippets, key bindings,
+    breakpoints, themes - personal configuration, not a cache), and any path
+    containing an `Adobe Premiere Pro Auto-Save` component (project recovery
+    data that sits one directory away from the Premiere preview caches this
+    module *does* discover and delete, and was judged the single likeliest
+    way this module could destroy real work if left unguarded). Checked
+    independently in both `DeveloperKitView.performPurge` and
+    `XcodeArchivesListView.delete` - defense in depth, not trusted to a
+    single call site.
+  - **`FileOperations.clearSystemCaches()` was removed, not fixed in
+    place.** It deleted every direct child of *both* `~/Library/Caches`
+    *and* `~/Library/Application Support` - the latter is real application
+    data (login state, licenses, local databases), not a cache - bypassed
+    `canDelete`, deleted permanently with zero confirmation, and swallowed
+    every per-item failure with a bare `continue`. Its only caller was the
+    Tools menu's "Clear Cache" item in `MainContentView`'s toolbar, which
+    this module's toolbar entry point replaced outright; the Tools menu
+    itself was removed too since that item was its only content. See
+    `CHANGELOG.md`'s Unreleased section for the user-facing note - this is a
+    real behavior removal, not an invisible refactor.
