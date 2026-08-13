@@ -14,6 +14,14 @@ enum BundleProtection {
     private static let protectedSuffixes = [
         ".app", ".framework", ".bundle", ".xpc", ".plugin", ".appex",
         ".photoslibrary", ".sparsebundle",
+        // Creative-suite library packages. None of these end in ".bundle"
+        // despite being package directories, so each needs its own suffix -
+        // "Wedding.fcpbundle".hasSuffix(".bundle") is false. Deleting a
+        // single file out of one of these (a render file, a project asset)
+        // can corrupt the whole library the same way deleting one file out
+        // of a signed .app breaks its code signature.
+        ".fcpbundle", ".imovielibrary", ".theater", ".tvlibrary",
+        ".logicx", ".band",
     ]
 
     /// True when `name` (a single path component, not a full path) marks a
