@@ -155,7 +155,7 @@ struct AppDetailInspector: View {
                             if !relatedItems.isEmpty {
                                 HStack(spacing: 12) {
                                     MixedStateCheckbox(
-                                        state: selectAllState,
+                                        state: selectAllState.nsControlState,
                                         action: {
                                             if selectAllState == .all {
                                                 selection.includedItemPaths.removeAll()

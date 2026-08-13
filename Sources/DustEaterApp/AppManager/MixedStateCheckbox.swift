@@ -1,7 +1,13 @@
 import SwiftUI
 
+/// Tri-state checkbox for "select all" controls, backed by a plain
+/// `NSControl.StateValue` rather than any one feature's selection type -
+/// both App Manager's `AppUninstallSelection.SelectAllState` and the
+/// duplicate inspector's own selection state map onto it via the
+/// `nsControlState` extensions below, so this stays a shared, feature-
+/// agnostic component.
 struct MixedStateCheckbox: NSViewRepresentable {
-    let state: AppUninstallSelection.SelectAllState
+    let state: NSControl.StateValue
     let action: () -> Void
 
     func makeNSView(context: Context) -> NSButton {
@@ -13,15 +19,7 @@ struct MixedStateCheckbox: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSButton, context: Context) {
         context.coordinator.action = action
-
-        switch state {
-        case .all:
-            nsView.state = .on
-        case .none:
-            nsView.state = .off
-        case .mixed:
-            nsView.state = .mixed
-        }
+        nsView.state = state
     }
 
     func makeCoordinator() -> Coordinator {
@@ -41,10 +39,20 @@ struct MixedStateCheckbox: NSViewRepresentable {
     }
 }
 
+extension AppUninstallSelection.SelectAllState {
+    var nsControlState: NSControl.StateValue {
+        switch self {
+        case .all: .on
+        case .none: .off
+        case .mixed: .mixed
+        }
+    }
+}
+
 #Preview {
     VStack {
         HStack {
-            MixedStateCheckbox(state: .all, action: {})
+            MixedStateCheckbox(state: .on, action: {})
             Text("All selected")
         }
 
@@ -54,7 +62,7 @@ struct MixedStateCheckbox: NSViewRepresentable {
         }
 
         HStack {
-            MixedStateCheckbox(state: .none, action: {})
+            MixedStateCheckbox(state: .off, action: {})
             Text("None selected")
         }
     }

@@ -397,3 +397,229 @@ oversights - don't "fix" these without the user asking:
     a different sensor key name or sensor hierarchy. All failures fall through
     to "Unavailable" gracefully. When revisit: only if/when Apple publishes
     an official temperature API.
+- **Duplicate & Large File Hunter (`Sources/DustEaterCore/Duplicates/`,
+  `Sources/DustEaterApp/Inspector/`):**
+  - **Runs entirely over an already-scanned `FileNode` tree - no second
+    directory walk, no second permission prompt.** Entry is
+    `MainContentView`'s "Find Duplicates" toolbar button, reachable only
+    from within `.scanFlow` once a scan has finished. There is no home-screen
+    card for this feature; it deliberately has exactly one entry point.
+  - **Timestamps and logical size come from on-demand `lstat`
+    (`FileStatReader`), not from `FileNode` itself.** `FileNode.size` is
+    on-disk *allocated* size, the wrong key for byte-accurate dedup (which
+    needs logical `st_size`), and `FileNode` is instantiated millions of
+    times per scan, so adding mtime/atime/birthtime there would be a real
+    per-node memory regression for data almost no node needs. Candidates are
+    pre-filtered by `FileNode.size` first (thousands of files after the
+    default 1 MB floor, not millions), and only those get an individual
+    `lstat`. Do not "optimize" this by extending `AttrListBulkReader` -
+    that parser reads packed attributes in strict ascending bit order
+    (`AttrListBulkReader.swift`), and inserting fields there is high-risk
+    for a benefit this module doesn't need.
+  - **Candidate prefiltering uses a quarter of the real size floor against
+    `FileNode`'s allocated size, then the real floor against logical size
+    after `lstat`.** A heavily APFS-compressed file can have an allocated
+    size well under its logical size; filtering candidates at the full
+    floor against allocated size would silently miss compressed
+    duplicates and compressed large files. Both `DuplicateDetector` and
+    `LargeFileFinder` apply this same `max(1, floor / 4)` prefilter,
+    then re-check the real floor against `InspectedFile.logicalSize`
+    after `lstat` - so the loosened prefilter only ever widens the
+    candidate set, never the final result.
+  - **App bundle interiors (`.app`, `.framework`, `.bundle`, `.xpc`,
+    `.plugin`, `.appex`, `.photoslibrary`, `.sparsebundle`) are excluded
+    from both duplicate and large-file candidates** (`BundleProtection.swift`).
+    This can't be left to `FileOperations.isSystemProtected`: that only
+    blocks fixed system paths like `/Applications`, not a user-writable
+    bundle sitting in `~/Downloads` or `~/Desktop` - exactly where users
+    keep the apps they might scan. Deleting one file out of a signed bundle
+    invalidates its code signature and can silently break the app. Both
+    `DuplicateDetector.collectCandidatePaths` and
+    `LargeFileFinder.collectCandidatePaths` carry "am I inside a bundle"
+    down their tree walk rather than checking each file's full ancestor
+    chain, so the check costs one suffix comparison per directory, right
+    where a bundle boundary is actually crossed.
+  - **"Not opened" uses `LargeFileEntry.lastUsedDate`
+    (`AppLastUsedDateProvider`'s Spotlight `kMDItemLastUsedDate`, falling
+    back to filesystem mtime), not raw `st_atime`.** macOS access time is
+    routinely bumped by Spotlight indexing, Time Machine, and antivirus
+    scanners, and some volumes defer atime updates entirely - it reads as
+    "recently used" for files nobody has actually opened.
+    `AppLastUsedDateProvider` already implements exactly this signal and is
+    path-generic despite the "App" in its name, so `LargeFileFinder` reuses
+    it directly (via a small public wrapper,
+    `LargeFileFinder.defaultLastUsedDateProvider`, needed only because
+    Swift requires a public API's default parameter value to be at least
+    as visible as the API itself). An unknown last-used date is always kept
+    in results, never treated as evidence of staleness - see
+    `LargeFileFinder.matches`.
+  - **Every smart-selection rule (`SmartSelector`) and the UI's own
+    `DuplicateSelectionState` enforce the same invariant: at least one file
+    per duplicate set is always left unselected.** A `DuplicateSet` is
+    never smaller than 2 by construction, so "keep one, select the rest" is
+    always well-defined. `allInDownloads` is the rule that actually needs
+    this guard - when every copy in a set lives in Downloads, it keeps the
+    newest rather than selecting all of them. Do not add a rule that can
+    select every copy in a set.
+  - **The hard-link collapse in `DuplicatePartitioner.collapsingHardLinks`
+    keeps whichever alias `Dictionary(grouping:)` iterates first among
+    files sharing a `(deviceID, inode)` pair - which one survives is
+    unspecified, not a bug.** Both aliases point at the same on-disk bytes,
+    so it doesn't matter which path is kept; `DuplicateDetectorTests`
+    asserts the invariant (exactly one alias survives) rather than pinning
+    down which.
+  - **Full-file SHA-256 hashing (`FileHasher.fullDigest`) issues one
+    `BlockingIO.run` call per 1 MB chunk, not one call for the whole file.**
+    `BlockingIO.run` dispatches its closure onto a plain `DispatchQueue`,
+    which does not carry Swift Concurrency's task-local cancellation state -
+    a `Task.isCancelled` check placed *inside* one giant blocking closure
+    would never actually fire, no matter how long the file. Checking
+    between chunks, from the genuinely async calling context, is what makes
+    hashing a multi-gigabyte file actually abort within about one chunk's
+    read time when the user cancels.
+  - **`DuplicateDetector`'s hashing concurrency is a bounded sliding window
+    (`withConcurrentTasks`, capped at `activeProcessorCount * 4`), not the
+    unbounded `TaskGroup` fan-out `DiskScanner` deliberately uses for
+    directory recursion.** This is not a contradiction of that file's
+    documented reasoning (`DiskScanner.swift`): hashing tasks are leaves
+    that read one file and return, never needing to acquire a further
+    permit from this same window to make progress, so there's no circular
+    wait the way an unbounded *recursive* fan-out could create.
+  - **The confirmation sheet re-checks each file exists and is still
+    deletable immediately before acting on it** (`DuplicatesView.
+    performDelete`), rather than trusting the selection snapshot blindly.
+    There's a real window between analysis and confirmation where the
+    filesystem can change; this closes it for the cost of one
+    `fileExists`/`canDelete` check per file.
+  - **Deletion offers both Move to Trash and Delete Permanently**, matching
+    the existing single-item delete alert in `MainContentView` - unlike App
+    Manager's `UninstallConfirmationSheet`, which is trash-only. This was an
+    explicit choice (not an oversight) to keep the app's delete UI
+    consistent across features.
+  - **`DuplicatesView`'s `root` is a snapshot, not live-updated after a
+    delete made from within the inspector itself.** `ContentView.
+    handleInspectorDeleted` reconciles the *main* scan tree via
+    `removingNode` + `coordinator.updateTree` so the treemap and total
+    stay correct, but the inspector's own `root` stays as it was when the
+    screen opened. This is the same "detected, not reconciled live"
+    trade-off `FileSystemWatcher` already documents elsewhere in this
+    codebase. It's harmless in practice: re-analyzing against a stale root
+    just fails to `lstat` the now-missing paths, which drop out on their
+    own exactly like any file removed externally mid-scan.
+  - **`MixedStateCheckbox` takes a plain `NSControl.StateValue`, not
+    `AppUninstallSelection.SelectAllState`.** It was generalized when this
+    module needed the same tri-state checkbox for a completely different
+    selection type (`DuplicateSelectionState.SelectAllState`); both map
+    onto `NSControl.StateValue` via a small `nsControlState` extension
+    instead of coupling the shared component to either feature's selection
+    type.
+  - **No perceptual image hashing.** The brief asked for it as a Phase 2/
+    optional item; it's deferred entirely. Approximate matches can't be
+    safely auto-selected for deletion the way byte-identical matches can,
+    and would need a distinctly more cautious UI (no Smart Select, probably
+    a confidence indicator) rather than fitting into the existing
+    `DuplicateSet`/`SmartSelector` shape. Revisit as its own scoped feature
+    if wanted.
+  - **Developer-tool directories (`node_modules`, `.git`, package-manager
+    caches, build output) are hidden from both lists by default**
+    (`DeveloperArtifactFolders.swift`), with a "Show Developer Tool
+    Folders" toggle in the Filters menu to reveal them instantly. This is a
+    different risk category from `BundleProtection`: deleting a file out
+    of a signed `.app` breaks a code signature, but deleting a duplicate
+    file out of a project-local `node_modules` breaks that specific
+    project's build until it's reinstalled - and unlike a global
+    package-manager cache (`~/.npm`, `~/Library/Caches/npm`), which
+    regenerates cleanly, neither `DuplicateDetector` nor `LargeFileFinder`
+    has any way to tell an active `node_modules` from an abandoned one.
+    The same package is also routinely installed byte-identically across a
+    dozen unrelated projects, making this the single biggest source of
+    noisy, low-value duplicate reports on a developer's Mac. The toggle
+    only changes what's *visible* for auditing total size - it doesn't
+    make anything safer to select for deletion, and the help text on the
+    toggle says so explicitly. App Manager's existing "Developer Tools"
+    detection (`DeveloperToolFolders.swift`) was evaluated and found not
+    reusable here: it's a fixed 24-name list matched only against top-level
+    folders directly under `~/Library/{Caches,Containers,...}`, and never
+    walks into project-local `node_modules` scattered across the disk -
+    entirely different scope from what this needed.
+  - **The exclusion filters at *display* time, not scan time - `DuplicatesView`
+    always calls Core with `includeDeveloperArtifacts: true`, and filters
+    `duplicateSets`/`largeFileEntries` (computed properties) based on the
+    toggle instead.** `DuplicateScanOptions.includeDeveloperArtifacts` /
+    `LargeFileFilter.includeDeveloperArtifacts` (Core) still support
+    skipping these directories entirely during the tree walk - never
+    stat'd or hashed - and stay covered by `DuplicateDetectorTests`/
+    `LargeFileFinderTests` for callers that want that (a future CLI tool,
+    for instance). The GUI deliberately doesn't use that mode: an earlier
+    version did, which meant flipping the toggle required a full re-scan
+    since the excluded files' sizes/hashes/dates had genuinely never been
+    gathered. Filtering at display time (`DeveloperArtifactFolders.
+    pathContainsDeveloperArtifact`, checking path components against the
+    same name list) makes the toggle instant, at the direct cost of every
+    scan always hashing `node_modules`/`.git` trees whether or not they end
+    up shown - a real tradeoff, decided in favor of toggle responsiveness
+    over default-scan speed. If that tradeoff ever needs revisiting (e.g.
+    scans feel slow on `node_modules`-heavy machines), switch
+    `runFullAnalysis`'s hardcoded `true` back to the toggle's value rather
+    than re-deriving this from scratch.
+  - **Deleting every copy of a duplicate file (including what would
+    otherwise be the protected "last copy") is possible, but deliberately
+    requires a separate, explicit action from the normal flow.**
+    `DuplicateSelectionState.toggle` (`DuplicateSelectionState.swift`) no
+    longer refuses to select the last unselected file in a set - the
+    checkbox on that file's `FileFactsCard` is warned (an orange "Last
+    Copy" badge, distinct help text) rather than disabled. A dedicated
+    "Include Original" button in `DuplicateSetOverview`, styled and labeled
+    distinctly from "Select All", does the same thing in one click, and
+    only appears while there's still a copy left to include. Two things
+    are unconditionally *not* touched by this:
+    - `SmartSelector`'s automated bulk rules (`SmartSelector.swift`, Core)
+      keep their hard "always keep one survivor" guarantee unconditionally,
+      still enforced by `noRuleEverSelectsEveryFileInASet` and friends -
+      Smart Select applies across potentially dozens of sets at once with
+      far less per-file visibility than the overview gives, so that's the
+      one place a full wipe must never be reachable.
+    - `DuplicateCleanConfirmationSheet` detects when a delete would leave
+      zero copies of a file (`DuplicatesView.fullyDeletedFileNames`) and
+      shows an explicit "No Copies Will Remain" warning banner, distinct
+      from the routine "delete N duplicate files" framing - this is a
+      meaningfully more consequential outcome (the file is gone, not just
+      decluttered) and the confirmation step says so before it happens.
+  - **Image duplicate sets render as a grid of `DuplicateImageCard` tiles
+    (`DuplicateSetOverview.swift`) - thumbnail, checkbox overlaid top-left,
+    details below - one card per copy, not one shared preview.** This
+    superseded an earlier version of the design that showed a single
+    "hero" thumbnail once above a text-first row list, reasoning that since
+    every copy is byte-identical there was nothing to gain from repeating
+    the same picture per row. That reasoning about *comparison* was correct
+    but solved the wrong problem: each row still needs to be an
+    independently clickable, recognizable selection target (matching
+    Photos.app's own duplicate-review grid - photo tile + selection badge,
+    not a filename you have to read), and a single shared hero doesn't
+    provide that. The picture repeating across cards is therefore
+    intentional, not a regression to "fix" back into one preview - it is
+    not there for visual comparison (every card shows the identical
+    bytes), it's what makes each tile self-sufficient as a click target.
+    Non-image duplicate sets keep the original `FileFactsCard` stacked-row
+    layout (`DuplicateSetOverview.isImageSet` branches between the two) -
+    the card grid only makes sense once there's real image content to
+    show.
+    `ThumbnailImageView.swift` wraps `QLThumbnailGenerator`
+    (`QuickLookThumbnailing`, auto-links with no `Package.swift` change,
+    same as `QuickLookUI`) behind an actor-based cache (`ThumbnailCache`)
+    that de-duplicates concurrent requests for the same path/size - this is
+    what makes rendering the same picture across several cards cheap rather
+    than re-generating it per card. `FileFactsCard`'s smaller inline
+    thumbnail (40pt, shared with the large-files detail panel) is unrelated
+    to this and unchanged. `ImageFileDetector.isImage(atPath:)` (Core,
+    `UniformTypeIdentifiers`, also auto-links) decides per-file whether to
+    attempt a thumbnail at all; non-image files keep the plain `NSWorkspace`
+    Finder icon, which is also `ThumbnailImageView`'s loading state and its
+    failure fallback - there is no separate spinner. `DuplicateImageCard`'s
+    selection badge is a hand-built `ZStack` (translucent circle backing +
+    SF Symbol), not SF Symbols' `.palette` rendering mode - `circle` (the
+    unselected symbol) is single-layer, so palette mode has no second layer
+    to carry the dark backing color, which would silently vanish over a
+    bright photo. Don't "simplify" it back to `.palette` without checking
+    that both `circle` and `checkmark.circle.fill` actually have matching
+    layer counts.

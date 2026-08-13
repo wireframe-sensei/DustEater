@@ -8,6 +8,7 @@ struct ContentView: View {
         case scanFlow
         case appManager
         case diskHealth
+        case inspector
     }
 
     @State private var screen: TopLevelScreen = .home
@@ -86,7 +87,8 @@ struct ContentView: View {
                     selectedTheme: $selectedTheme,
                     treemapCache: treemapCache,
                     onBackToHome: backToHome,
-                    onRescan: { startScan(path: root.path) }
+                    onRescan: { startScan(path: root.path) },
+                    onOpenInspector: { screen = .inspector }
                 )
             case .needsFullDiskAccess(let path):
                 PermissionBannerView(path: path, onBackToHome: backToHome)
@@ -97,6 +99,24 @@ struct ContentView: View {
             AppManagerView(onBackToHome: backToHome)
         case .diskHealth:
             DiskHealthView(onBackToHome: backToHome)
+        case .inspector:
+            // `screen` and `coordinator.state` are independent - a
+            // cancelled or superseded scan can strand this case, so this
+            // isn't defensive noise, it's the actual dead-end guard for
+            // reaching `.inspector` with nothing to inspect.
+            if case .finished(let root) = coordinator.state {
+                DuplicatesView(
+                    root: root,
+                    onBackToHome: backToHome,
+                    onBackToScan: { screen = .scanFlow },
+                    onDeleted: handleInspectorDeleted
+                )
+            } else {
+                ErrorStateView(
+                    message: "The scan this inspector was built from is no longer available.",
+                    onBackToHome: backToHome
+                )
+            }
         }
     }
 
@@ -106,6 +126,34 @@ struct ContentView: View {
     private func backToHome() {
         screen = .home
         selectedPath = nil
+    }
+
+    /// Reconciles a batch delete made from the duplicates/large-files
+    /// inspector back into the main scan tree. The inspector deletes files
+    /// directly via `FileOperations` and reports back which paths actually
+    /// succeeded (`DuplicatesView.onDeleted`) - it never touches
+    /// `coordinator`'s tree itself, since it only ever works from a
+    /// snapshot of `root` taken when it opened.
+    ///
+    /// No pruning needed here for `MainContentView`'s own `expandedPaths` /
+    /// `backStack` / `forwardStack`: leaving `.scanFlow` for `.inspector`
+    /// already tears down that view's `@State`, so returning to the
+    /// treemap starts all three fresh regardless of what was deleted.
+    private func handleInspectorDeleted(_ deletedPaths: Set<String>) {
+        guard case .finished(var currentRoot) = coordinator.state else { return }
+
+        for path in deletedPaths {
+            if let updated = currentRoot.removingNode(atPath: path) {
+                currentRoot = updated
+            }
+        }
+
+        coordinator.updateTree(currentRoot)
+        treemapCache.invalidate()
+
+        if let selectedPath, deletedPaths.contains(selectedPath) {
+            self.selectedPath = nil
+        }
     }
 
     private func startScan(path: String) {
@@ -390,6 +438,7 @@ struct MainContentView: View {
     let treemapCache: TreemapCache
     let onBackToHome: () -> Void
     let onRescan: () -> Void
+    let onOpenInspector: () -> Void
 
     // Owned here rather than in `FileTreeListView`: the delete alert below is
     // triggered from the toolbar (acting on `selectedNode`), not from a
@@ -547,7 +596,7 @@ struct MainContentView: View {
                     Button {
                         copyPath()
                     } label: {
-                        Label("Copy Path", systemImage: "doc.on.doc")
+                        Label("Copy Path", systemImage: "square.on.square")
                     }
                     .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
                     .help("Copy the selected item's full path")
@@ -560,6 +609,17 @@ struct MainContentView: View {
                     }
                     .disabled((selectedNode?.isSyntheticGroupingNode ?? false) || selectedNode.map { !FileOperations.canDelete(at: $0.path) } ?? true)
                     .help("Move the selected item to the Trash, or delete it permanently")
+                }
+
+                // A headline feature gets its own toolbar button rather
+                // than burial in the Tools menu below.
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        onOpenInspector()
+                    } label: {
+                        Label("Find Duplicates", systemImage: "doc.on.doc")
+                    }
+                    .help("Find duplicate and large files in this scan")
                 }
 
                 ToolbarItem(placement: .primaryAction) {
