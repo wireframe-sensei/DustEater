@@ -57,32 +57,39 @@ enum IORegistryDiskReader {
                 }
             }
 
-            if let protocolDict = properties[kIOPropertyProtocolCharacteristicsKey as String] as? [String: Any] {
-                if let interconnectType = protocolDict[kIOPropertyPhysicalInterconnectTypeKey as String] as? String {
-                    switch interconnectType {
-                    case "PCI-Express":
-                        interconnect = .internal
-                        interconnectProtocol = "PCI-Express"
-                    case "SATA":
-                        interconnect = .internal
-                        interconnectProtocol = "SATA"
-                    case "USB":
-                        interconnect = .external
-                        interconnectProtocol = "USB"
-                    case "Thunderbolt":
-                        interconnect = .external
-                        interconnectProtocol = "Thunderbolt"
-                    default:
-                        interconnectProtocol = interconnectType
-                    }
-                }
+        }
 
-                if let locationKey = protocolDict[kIOPropertyPhysicalInterconnectLocationKey as String] as? String {
-                    if locationKey == "External" {
-                        interconnect = .external
-                    } else if locationKey == "Internal" {
-                        interconnect = .internal
-                    }
+        if let protocolDict = IORegistryEntrySearchCFProperty(
+            service,
+            kIOServicePlane,
+            kIOPropertyProtocolCharacteristicsKey as CFString,
+            kCFAllocatorDefault,
+            searchOptions
+        ) as? [String: Any] {
+            if let interconnectType = protocolDict[kIOPropertyPhysicalInterconnectTypeKey as String] as? String {
+                switch interconnectType {
+                case "PCI-Express":
+                    interconnect = .internal
+                    interconnectProtocol = "PCI-Express"
+                case "SATA":
+                    interconnect = .internal
+                    interconnectProtocol = "SATA"
+                case "USB":
+                    interconnect = .external
+                    interconnectProtocol = "USB"
+                case "Thunderbolt":
+                    interconnect = .external
+                    interconnectProtocol = "Thunderbolt"
+                default:
+                    interconnectProtocol = interconnectType
+                }
+            }
+
+            if let locationKey = protocolDict[kIOPropertyPhysicalInterconnectLocationKey as String] as? String {
+                if locationKey == "External" {
+                    interconnect = .external
+                } else if locationKey == "Internal" {
+                    interconnect = .internal
                 }
             }
         }

@@ -245,6 +245,32 @@ This prevents future developers (or the user in future sessions) from
 "fixing" deliberate decisions as if they were bugs, and documents the
 accumulated architectural reasoning of the project.
 
+## AI Assistant Coding Guidelines
+
+### Core Philosophy: Simplicity over Cleverness
+You are an expert software engineer who prioritizes simple, readable, and easily maintainable code. Your primary goal is to write code that is understandable at a glance. Do not act like a highly theoretical architect; act like a pragmatic builder. 
+
+### 1. AHA over strict DRY (Avoid Hasty Abstractions)
+- **Do not prematurely abstract.** It is strictly better to duplicate code than to create a complex, rigid abstraction that obscures the underlying logic.
+- **Rule of Three:** Never extract logic into a shared helper function, generic class, or utility file until you have written the exact same logic at least three times. 
+
+### 2. DAMP over DRY (Descriptive and Meaningful Phrases)
+- Do not optimize for fewer lines of code. Optimize for readability.
+- Keep the context inline. Do not hide simple operations behind layers of generalized functions. 
+- Variable and function names must be explicit, even if they are slightly longer.
+
+### 3. Flat and Direct (YAGNI)
+- **You Aren't Gonna Need It:** Solve the immediate problem directly. Do not build generic, future-proof interfaces, factories, or deep inheritance trees unless explicitly instructed.
+- Keep the logic flat. Write top-to-bottom, procedural code where possible. Avoid splitting a simple sequence of events into five different tiny helper functions.
+- Prefer simple, standard APIs over obscure, low-level technical implementations or complex system calls unless performance absolutely dictates it.
+
+### 4. When in Doubt, Inline
+- If you are debating whether to separate logic into a new function/file or keep it inline, **keep it inline**.
+- I want to be able to read a function from top to bottom without jumping around the file or opening other files.
+
+### 5. Correction Directives
+- If I tell you "this is too complex" or "de-abstract this," immediately flatten the logic, remove generics, and inline the helper functions.
+
 ## Deliberately deferred / intentional exceptions
 
 Things that look like they might need fixing but are actual decisions, not
@@ -372,15 +398,17 @@ oversights - don't "fix" these without the user asking:
     arithmetic, health-status rollup evaluator - *is* unit-tested via
     dependency injection (see `APFSVolumeMetricsTests.swift`,
     `PhysicalDiskHealthTests.swift`).
-  - **Wear-level % and total bytes written show "Not Available on This Mac"**
+  - **Wear-level % and total bytes written show "Not Exposed on Apple Silicon"**
     rather than blank/nil/guessed numbers on virtually all Apple Silicon Macs
     and most external/USB drives. This is not a bug or a missing feature - it
     reflects Apple's platform restriction: no public non-entitled API exposes
     these metrics. The few tools that claim to read them (like smartctl) are
-    also blocked on Apple Silicon. DustEater is ad-hoc signed with no path to
-    the private entitlements that would be required. When revisit: only if
-    Apple opens up a public API, or if the app ships with a Developer ID
-    certificate and the accompanying privileged helper infrastructure.
+    also blocked on Apple Silicon. This restriction is permanent and not
+    addressable by code changes, signing, or Developer ID membership - Apple's
+    entitlements check the Team ID against an internal allowlist and restrict
+    them to Apple's own system binaries regardless of who signs the requesting
+    process. When revisit: only if Apple opens up a public API for these
+    metrics.
   - **Purgeable-space reclaim uses an AppleScript admin-password prompt,** not
     a privileged-helper daemon (SMJobBless/SMAppService). DustEater has no
     Developer ID cert (CLAUDE.md:213-218), so a persistent daemon isn't

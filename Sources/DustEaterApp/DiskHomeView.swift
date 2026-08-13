@@ -21,6 +21,7 @@ struct DiskInfo: Identifiable {
 
 struct DiskHomeView: View {
     @State private var disks: [DiskInfo] = []
+    @State private var service = DiskTelemetryService()
     // Distinguishes "still loading" from "loaded, found nothing" - without
     // this, a machine where `mountedVolumeURLs` returns nil or every volume
     // gets filtered out shows "Loading disks..." forever with no retry and
@@ -30,7 +31,6 @@ struct DiskHomeView: View {
     let onSelectDisk: (String) -> Void
     let onSelectCustomFolder: () -> Void
     let onOpenAppManager: () -> Void
-    let onOpenDiskHealth: () -> Void
 
     var body: some View {
         ZStack {
@@ -127,11 +127,28 @@ struct DiskHomeView: View {
                                 }
 
                                 CustomFolderCardView(onTap: onSelectCustomFolder)
-                                DiskHealthCardView(onTap: onOpenDiskHealth)
                                 AppManagerCardView(onTap: onOpenAppManager)
                             }
                             .controlSize(.extraLarge)
                             .padding(20)
+
+                            if case .loaded(let diskHealth) = service.state, !diskHealth.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Purgeable Space")
+                                        .font(.headline)
+                                        .padding(.leading, 20)
+
+                                    ForEach(diskHealth) { disk in
+                                        PurgeableSpaceSection(
+                                            disk: disk,
+                                            reclaimState: service.reclaimState,
+                                            onReclaimTap: { service.reclaimPurgeableSpace(forVolumeAt: disk.bsdName) }
+                                        )
+                                    }
+                                    .padding(.horizontal, 20)
+                                }
+                                .padding(.bottom, 20)
+                            }
                         }
                     }
                 }
@@ -154,6 +171,9 @@ struct DiskHomeView: View {
                 guard !Task.isCancelled else { return }
                 loadDisks()
             }
+        }
+        .task {
+            service.refresh()
         }
         // Mount/unmount/rename fire immediately, so plugging in or ejecting
         // a drive feels instant rather than waiting for the next poll.
@@ -359,7 +379,6 @@ struct DiskCardView: View {
     DiskHomeView(
         onSelectDisk: { _ in },
         onSelectCustomFolder: {},
-        onOpenAppManager: {},
-        onOpenDiskHealth: {}
+        onOpenAppManager: {}
     )
 }

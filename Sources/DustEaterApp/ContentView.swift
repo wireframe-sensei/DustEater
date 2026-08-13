@@ -7,7 +7,6 @@ struct ContentView: View {
         case home
         case scanFlow
         case appManager
-        case diskHealth
         case inspector
     }
 
@@ -43,9 +42,6 @@ struct ContentView: View {
                 },
                 onOpenAppManager: {
                     screen = .appManager
-                },
-                onOpenDiskHealth: {
-                    screen = .diskHealth
                 }
             )
         case .scanFlow:
@@ -97,8 +93,6 @@ struct ContentView: View {
             }
         case .appManager:
             AppManagerView(onBackToHome: backToHome)
-        case .diskHealth:
-            DiskHealthView(onBackToHome: backToHome)
         case .inspector:
             // `screen` and `coordinator.state` are independent - a
             // cancelled or superseded scan can strand this case, so this
