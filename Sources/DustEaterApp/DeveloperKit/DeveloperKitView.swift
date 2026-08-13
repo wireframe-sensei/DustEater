@@ -6,15 +6,19 @@ import DustEaterCore
 /// runs no directory scan of its own and needs no additional permission
 /// prompt, the same "reuse the scan" contract `DuplicatesView` uses.
 ///
-/// Read-only for now: sizes, safety badges, toggles, and Reveal in Finder,
-/// but no delete action yet. Selecting targets and watching the running
-/// total is genuinely useful review material on its own, and shipping it
-/// without an attached delete action keeps this screen fully reviewable in
-/// isolation before the destructive path lands.
+/// Sizes, safety badges, toggles, and Reveal in Finder for browsing; a
+/// batched purge with a confirmation sheet and per-item progress for
+/// actually reclaiming space.
 struct DeveloperKitView: View {
     let root: FileNode
     let onBackToHome: () -> Void
     let onBackToScan: () -> Void
+    /// Notifies the caller which paths were actually deleted, so
+    /// `ContentView` can fold them out of the live scan tree via
+    /// `removingNode` + `coordinator.updateTree` without a rescan - the
+    /// exact same contract `DuplicatesView.onDeleted` uses, reusing
+    /// `ContentView.handleInspectorDeleted` on the other end.
+    let onDeleted: (Set<String>) -> Void
 
     @State private var scanner = PurgeScanner()
     @State private var selection = PurgeSelection()
@@ -23,6 +27,17 @@ struct DeveloperKitView: View {
     // so it has no reason to share the main measure pipeline's state shape.
     @State private var archives: [XcodeArchive] = []
     @State private var showArchivesList = false
+
+    @State private var showConfirmSheet = false
+    @State private var isDeleting = false
+    @State private var deleteErrorMessage: String?
+    @State private var deletionProgress: PurgeDeletionProgress?
+    /// The exact targets the open confirmation sheet will act on, set
+    /// explicitly when "Purge Selected" is clicked rather than always
+    /// recomputed live from `selection` - so a selection change made while
+    /// the sheet happens to still be open (e.g. a slow retry) can't
+    /// silently change what a click on "Delete Permanently" acts on.
+    @State private var pendingDeleteTargets: [PurgeTarget] = []
 
     private let columns = [GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 16)]
 
@@ -42,7 +57,17 @@ struct DeveloperKitView: View {
         .task { scanner.measure(in: root) }
         .task { archives = await XcodeArchiveLister.listArchives(in: root) }
         .sheet(isPresented: $showArchivesList) {
-            XcodeArchivesListView(archives: archives)
+            XcodeArchivesListView(archives: $archives, onDeleted: { path in onDeleted([path]) })
+        }
+        .sheet(isPresented: $showConfirmSheet) {
+            PurgeConfirmationSheet(
+                targets: pendingDeleteTargets,
+                totalBytesToReclaim: pendingDeleteTargets.reduce(Int64(0)) { $0 + $1.sizeBytes },
+                deletionProgress: deletionProgress,
+                isDeleting: $isDeleting,
+                errorMessage: $deleteErrorMessage,
+                onConfirm: performPurge
+            )
         }
     }
 
@@ -64,13 +89,26 @@ struct DeveloperKitView: View {
             Spacer()
 
             if selection.count > 0, let loadedCategories {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(selection.count) selected")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(ByteFormatter.string(fromBytes: selection.reclaimableBytes(across: loadedCategories)))
-                        .font(.control)
-                        .foregroundStyle(.primary)
+                HStack(spacing: 12) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(selection.count) selected")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(ByteFormatter.string(fromBytes: selection.reclaimableBytes(across: loadedCategories)))
+                            .font(.control)
+                            .foregroundStyle(.primary)
+                    }
+
+                    Button {
+                        pendingDeleteTargets = selectedTargets(in: loadedCategories)
+                        showConfirmSheet = true
+                    } label: {
+                        Label("Purge Selected", systemImage: "trash")
+                    }
+                    .font(.control)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .controlSize(.small)
                 }
             }
         }
@@ -257,5 +295,90 @@ struct DeveloperKitView: View {
         }
         .disabled(loadedCategories?.isEmpty ?? true)
         .help("Bulk-select targets by safety level. Caution-level targets are never bulk-selected.")
+    }
+
+    private func selectedTargets(in categories: [PurgeCategory]) -> [PurgeTarget] {
+        categories.flatMap(\.targets).filter { selection.isSelected($0) }
+    }
+
+    // MARK: - Purge
+
+    /// Mirrors `DuplicatesView.performDelete`: a plain (non-`@MainActor`)
+    /// `Task`, so the loop - including `FileOperations.delete`, which for a
+    /// large `DerivedData` can run for real wall-clock seconds - runs off
+    /// the main actor and never freezes the window. Each iteration hops
+    /// back via `MainActor.run` only to report progress and, at the end, to
+    /// reconcile state.
+    private func performPurge(permanently: Bool) {
+        isDeleting = true
+        deleteErrorMessage = nil
+        let snapshot = pendingDeleteTargets
+        let total = snapshot.count
+
+        Task {
+            var deletedPaths: Set<String> = []
+            var errors: [String] = []
+
+            for (index, target) in snapshot.enumerated() {
+                guard !Task.isCancelled else { break }
+
+                await MainActor.run {
+                    deletionProgress = PurgeDeletionProgress(completed: index, total: total, currentTitle: target.definition.title)
+                }
+
+                // TOCTOU guard, same as `DuplicatesView.performDelete`: the
+                // filesystem can change in the window between measuring and
+                // this confirmation.
+                guard FileManager.default.fileExists(atPath: target.path) else {
+                    errors.append("\(target.definition.title): no longer exists, skipped")
+                    continue
+                }
+                // Belt and braces - `PurgeSelection.toggle` already refuses
+                // `.reportOnly` targets, so this should never actually fire.
+                guard target.safety != .reportOnly else {
+                    errors.append("\(target.definition.title): not deletable, skipped")
+                    continue
+                }
+                guard !PurgeCatalog.isDenied(path: target.path) else {
+                    errors.append("\(target.definition.title): protected, skipped")
+                    continue
+                }
+                guard FileOperations.canDelete(at: target.path) else {
+                    errors.append("\(target.definition.title): protected, skipped")
+                    continue
+                }
+                if let bundleID = target.definition.blockingAppBundleID, FileOperations.isAppRunning(bundleIdentifier: bundleID) {
+                    errors.append("\(target.definition.title): the owning app is running, skipped")
+                    continue
+                }
+
+                do {
+                    try FileOperations.delete(at: target.path, permanently: permanently)
+                    deletedPaths.insert(target.path)
+                } catch {
+                    errors.append("\(target.definition.title): \(error.localizedDescription)")
+                }
+            }
+
+            await MainActor.run {
+                isDeleting = false
+                deletionProgress = nil
+
+                if !deletedPaths.isEmpty {
+                    scanner.removeDeletedPaths(deletedPaths)
+                    selection.removePaths(deletedPaths)
+                    onDeleted(deletedPaths)
+                }
+
+                if errors.isEmpty {
+                    showConfirmSheet = false
+                } else {
+                    // Sheet stays open with Cancel still enabled, so a
+                    // partial failure is inspectable rather than silently
+                    // dismissed - matching `DuplicatesView.performDelete`.
+                    deleteErrorMessage = errors.joined(separator: "\n")
+                }
+            }
+        }
     }
 }

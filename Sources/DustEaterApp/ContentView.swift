@@ -120,7 +120,8 @@ struct ContentView: View {
                 DeveloperKitView(
                     root: root,
                     onBackToHome: backToHome,
-                    onBackToScan: { screen = .scanFlow }
+                    onBackToScan: { screen = .scanFlow },
+                    onDeleted: handleInspectorDeleted
                 )
             } else {
                 ErrorStateView(

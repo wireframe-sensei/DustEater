@@ -52,13 +52,21 @@ struct ArchivesSummaryCardView: View {
     }
 }
 
-/// Per-archive drill-in list, read-only for now (Reveal in Finder only) -
-/// the same "sizes and browsing first, delete action later" staging as
-/// `DeveloperKitView` itself.
+/// Per-archive drill-in list: browse, Reveal in Finder, and delete one
+/// specific archive at a time - the only shape a delete action for Archives
+/// takes at all, per `PurgeCatalog.definitions`'s doc comment on why Archives
+/// never becomes a bulk-selectable `PurgeTarget`.
 struct XcodeArchivesListView: View {
-    let archives: [XcodeArchive]
+    @Binding var archives: [XcodeArchive]
+    /// Reports the deleted archive's path back up so `DeveloperKitView` can
+    /// forward it through the same `onDeleted` contract `DuplicatesView`
+    /// uses to reconcile the live scan tree.
+    let onDeleted: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var archiveToDelete: XcodeArchive?
+    @State private var showDeleteAlert = false
+    @State private var deleteErrorMessage: String?
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -92,6 +100,15 @@ struct XcodeArchivesListView: View {
                     }
                     .buttonStyle(.borderless)
                     .help("Reveal in Finder")
+
+                    Button(role: .destructive) {
+                        archiveToDelete = archive
+                        showDeleteAlert = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete this archive")
                 }
                 .padding(.vertical, 4)
             }
@@ -105,5 +122,41 @@ struct XcodeArchivesListView: View {
             }
         }
         .frame(minWidth: 480, minHeight: 400)
+        .alert("Delete Archive", isPresented: $showDeleteAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Move to Trash", role: .destructive) {
+                if let archiveToDelete { delete(archiveToDelete, permanently: false) }
+            }
+            Button("Delete Permanently", role: .destructive) {
+                if let archiveToDelete { delete(archiveToDelete, permanently: true) }
+            }
+        } message: {
+            if let archiveToDelete {
+                Text("\"\(archiveToDelete.appName)\" holds the only dSYM for that build. This can't be undone, and rebuilding won't replace it.")
+            }
+        }
+        .alert("Couldn't Delete Archive", isPresented: Binding(
+            get: { deleteErrorMessage != nil },
+            set: { isPresented in if !isPresented { deleteErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "")
+        }
+    }
+
+    private func delete(_ archive: XcodeArchive, permanently: Bool) {
+        // TOCTOU guard, same reasoning as `DeveloperKitView.performPurge`.
+        guard FileManager.default.fileExists(atPath: archive.path) else {
+            archives.removeAll { $0.path == archive.path }
+            return
+        }
+        do {
+            try FileOperations.delete(at: archive.path, permanently: permanently)
+            archives.removeAll { $0.path == archive.path }
+            onDeleted(archive.path)
+        } catch {
+            deleteErrorMessage = error.localizedDescription
+        }
     }
 }
