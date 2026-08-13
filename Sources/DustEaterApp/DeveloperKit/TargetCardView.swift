@@ -78,7 +78,7 @@ struct TargetCardView: View {
                     "Include in purge",
                     isOn: Binding(get: { isSelected }, set: { _ in onToggle() })
                 )
-                .toggleStyle(.switch)
+                .toggleStyle(.checkbox)
                 .labelsHidden()
             }
         }

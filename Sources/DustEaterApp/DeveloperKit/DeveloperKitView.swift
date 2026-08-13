@@ -20,15 +20,27 @@ struct DeveloperKitView: View {
     /// `ContentView.handleInspectorDeleted` on the other end.
     let onDeleted: (Set<String>) -> Void
 
+    /// Both sheets this screen can present, unified behind one
+    /// `.sheet(item:)` rather than two stacked `.sheet(isPresented:)`
+    /// modifiers on the same view - the latter is a known SwiftUI failure
+    /// mode (the second modifier's content closure can capture stale state)
+    /// that was the actual cause of "Purge Selected" opening a sheet
+    /// showing 0 items even though the header's own selection total, read
+    /// from the same state one line above, was correct.
+    private enum ActiveSheet: Identifiable {
+        case archives
+        case confirmPurge
+        var id: Self { self }
+    }
+
     @State private var scanner = PurgeScanner()
     @State private var selection = PurgeSelection()
     // Listed independently of `scanner`/`PurgeScanState`: an archive never
     // becomes a `PurgeTarget` (see `ArchivesSummaryCardView`'s doc comment),
     // so it has no reason to share the main measure pipeline's state shape.
     @State private var archives: [XcodeArchive] = []
-    @State private var showArchivesList = false
+    @State private var activeSheet: ActiveSheet?
 
-    @State private var showConfirmSheet = false
     @State private var isDeleting = false
     @State private var deleteErrorMessage: String?
     @State private var deletionProgress: PurgeDeletionProgress?
@@ -56,18 +68,20 @@ struct DeveloperKitView: View {
         .toolbar { toolbarContent }
         .task { scanner.measure(in: root) }
         .task { archives = await XcodeArchiveLister.listArchives(in: root) }
-        .sheet(isPresented: $showArchivesList) {
-            XcodeArchivesListView(archives: $archives, onDeleted: { path in onDeleted([path]) })
-        }
-        .sheet(isPresented: $showConfirmSheet) {
-            PurgeConfirmationSheet(
-                targets: pendingDeleteTargets,
-                totalBytesToReclaim: pendingDeleteTargets.reduce(Int64(0)) { $0 + $1.sizeBytes },
-                deletionProgress: deletionProgress,
-                isDeleting: $isDeleting,
-                errorMessage: $deleteErrorMessage,
-                onConfirm: performPurge
-            )
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .archives:
+                XcodeArchivesListView(archives: $archives, onDeleted: { path in onDeleted([path]) })
+            case .confirmPurge:
+                PurgeConfirmationSheet(
+                    targets: pendingDeleteTargets,
+                    totalBytesToReclaim: pendingDeleteTargets.reduce(Int64(0)) { $0 + $1.sizeBytes },
+                    deletionProgress: deletionProgress,
+                    isDeleting: $isDeleting,
+                    errorMessage: $deleteErrorMessage,
+                    onConfirm: performPurge
+                )
+            }
         }
     }
 
@@ -101,7 +115,7 @@ struct DeveloperKitView: View {
 
                     Button {
                         pendingDeleteTargets = selectedTargets(in: loadedCategories)
-                        showConfirmSheet = true
+                        activeSheet = .confirmPurge
                     } label: {
                         Label("Purge Selected", systemImage: "trash")
                     }
@@ -198,7 +212,7 @@ struct DeveloperKitView: View {
                             ArchivesSummaryCardView(
                                 archiveCount: archives.count,
                                 totalBytes: archives.reduce(0) { $0 + $1.sizeBytes },
-                                onBrowse: { showArchivesList = true }
+                                onBrowse: { activeSheet = .archives }
                             )
                         }
                     }
@@ -371,7 +385,7 @@ struct DeveloperKitView: View {
                 }
 
                 if errors.isEmpty {
-                    showConfirmSheet = false
+                    activeSheet = nil
                 } else {
                     // Sheet stays open with Cancel still enabled, so a
                     // partial failure is inspectable rather than silently
