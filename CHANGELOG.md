@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Developer & Creative Power-User Clean Up Kit**: New feature to find and
+  safely reclaim developer and creative-app caches and build artifacts
+  - Catalog of known Xcode, package-manager, Docker, and Adobe cache
+    locations, sized against the current scan with no extra permission
+    prompt, plus project-local artifacts (`node_modules`, Cargo `target`,
+    `.build`, `Pods`) discovered from the same scanned tree
+  - Every target is labeled Safe, Rebuildable, Caution, or Report Only,
+    with the exact rebuild command shown for anything rebuildable
+  - Docker's disk image, iOS Simulator runtimes, and Final Cut Pro/Logic
+    Pro library contents are Report Only - sized and explained, but never
+    offered for direct deletion, since none of them can be safely removed
+    from outside their owning app
+  - Xcode Archives get their own drill-in list rather than a bulk toggle -
+    delete one specific old archive, not "Archives (14 GB)" at once, since
+    an archive holds the only dSYM for a build that may have shipped
+  - Batched purge with a confirmation sheet, per-item progress, and Trash
+    or permanent deletion
+
+### Removed
+- **System Cache Clearing** (Tools > Clear Cache): removed in favor of the
+  Developer Kit above. The old implementation deleted every direct child of
+  both `~/Library/Caches` *and* `~/Library/Application Support` - the
+  latter holds real application data (login state, licenses, local
+  databases), not a cache - bypassed the app's own protected-path checks,
+  deleted permanently with no confirmation, and silently swallowed
+  per-item failures.
+
+### Fixed
+- **Bundle Protection**: `.fcpbundle`, `.imovielibrary`, `.theater`,
+  `.tvlibrary`, `.logicx`, and `.band` library packages are now protected
+  the same way `.app`/`.framework` already were. Previously the duplicate
+  and large-file inspectors could offer individual files inside a Final
+  Cut, iMovie, TV, Logic, or GarageBand library for deletion.
+
 ## [0.3.0] - 2026-08-11
 
 ### Added

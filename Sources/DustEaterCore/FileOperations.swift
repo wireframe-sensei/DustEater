@@ -121,28 +121,6 @@ public struct FileOperations {
         }
         return app.terminate()
     }
-
-    public static func clearSystemCaches() throws {
-        let cacheURLs: [URL] = [
-            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0],
-            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0],
-        ]
-
-        for cacheURL in cacheURLs {
-            let contents = try FileManager.default.contentsOfDirectory(
-                at: cacheURL,
-                includingPropertiesForKeys: nil
-            )
-
-            for itemURL in contents {
-                do {
-                    try FileManager.default.removeItem(at: itemURL)
-                } catch {
-                    continue
-                }
-            }
-        }
-    }
 }
 
 public enum FileOperationError: LocalizedError {

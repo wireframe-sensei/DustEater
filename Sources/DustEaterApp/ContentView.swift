@@ -467,13 +467,11 @@ struct MainContentView: View {
     @State private var expandedPaths: Set<String> = []
     @State private var showDeleteAlert = false
     @State private var itemToDelete: FileNode?
-    // Both delete and Clear Cache used to fail (or succeed) completely
-    // silently - `print()` to a console the user never sees, tree/UI
-    // otherwise unchanged, so a failed action looked identical to one that
-    // just hadn't been clicked. These surface the actual outcome.
+    // Delete used to fail (or succeed) completely silently - `print()` to a
+    // console the user never sees, tree/UI otherwise unchanged, so a failed
+    // delete looked identical to one that just hadn't been clicked. This
+    // surfaces the actual outcome.
     @State private var deleteErrorMessage: String?
-    @State private var cacheClearAlertMessage: String?
-    @State private var cacheClearSucceeded = false
     // Browser-style zoom history, like Finder/Safari/Xcode's Back/Forward -
     // not a strict "go to parent" stack, since a jump can come from the
     // sidebar (any directory, any depth) as well as drilling into the
@@ -629,7 +627,7 @@ struct MainContentView: View {
                 }
 
                 // A headline feature gets its own toolbar button rather
-                // than burial in the Tools menu below.
+                // than burial in a menu.
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         onOpenInspector()
@@ -670,17 +668,6 @@ struct MainContentView: View {
                 }
 
                 ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button(action: clearSystemCaches) {
-                            Label("Clear Cache", systemImage: "trash")
-                        }
-                    } label: {
-                        Label("Tools", systemImage: "ellipsis.circle")
-                    }
-                    .help("Utility options")
-                }
-
-                ToolbarItem(placement: .primaryAction) {
                     Button {
                     } label: {
                         Label("Info", systemImage: "info.circle")
@@ -713,14 +700,6 @@ struct MainContentView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(deleteErrorMessage ?? "")
-        }
-        .alert(cacheClearSucceeded ? "Cache Cleared" : "Couldn't Clear Cache", isPresented: Binding(
-            get: { cacheClearAlertMessage != nil },
-            set: { isPresented in if !isPresented { cacheClearAlertMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(cacheClearAlertMessage ?? "")
         }
     }
 
@@ -775,17 +754,6 @@ struct MainContentView: View {
             handleItemDeleted(node.path)
         } catch {
             deleteErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func clearSystemCaches() {
-        do {
-            try FileOperations.clearSystemCaches()
-            cacheClearSucceeded = true
-            cacheClearAlertMessage = "System caches were cleared."
-        } catch {
-            cacheClearSucceeded = false
-            cacheClearAlertMessage = error.localizedDescription
         }
     }
 
