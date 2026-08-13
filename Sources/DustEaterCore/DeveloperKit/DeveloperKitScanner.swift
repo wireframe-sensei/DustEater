@@ -99,7 +99,7 @@ public final class PurgeScanner {
             )
 
             guard !misses.isEmpty else {
-                self.state = .loaded(Self.grouped(measured))
+                self.state = .loaded(PurgeCategory.grouped(measured))
                 return
             }
 
@@ -109,7 +109,7 @@ public final class PurgeScanner {
             measured = await self.measure(misses, addingTo: measured, totalTargets: totalTargets)
 
             guard !Task.isCancelled else { return }
-            self.state = .loaded(Self.grouped(measured))
+            self.state = .loaded(PurgeCategory.grouped(measured))
         }
     }
 
@@ -194,13 +194,5 @@ public final class PurgeScanner {
         let node = await DiskScanner().scan(rootPath: definition.path)
         guard !Task.isCancelled else { return nil }
         return PurgeTarget(definition: definition, sizeBytes: node.size)
-    }
-
-    private static func grouped(_ targets: [PurgeTarget]) -> [PurgeCategory] {
-        PurgeCategoryID.allCases.compactMap { categoryID in
-            let categoryTargets = targets.filter { $0.definition.categoryID == categoryID }
-            guard !categoryTargets.isEmpty else { return nil }
-            return PurgeCategory(categoryID: categoryID, targets: categoryTargets.sorted { $0.sizeBytes > $1.sizeBytes })
-        }
     }
 }

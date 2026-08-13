@@ -8,6 +8,7 @@ struct ContentView: View {
         case scanFlow
         case appManager
         case inspector
+        case developerKit
     }
 
     @State private var screen: TopLevelScreen = .home
@@ -84,7 +85,8 @@ struct ContentView: View {
                     treemapCache: treemapCache,
                     onBackToHome: backToHome,
                     onRescan: { startScan(path: root.path) },
-                    onOpenInspector: { screen = .inspector }
+                    onOpenInspector: { screen = .inspector },
+                    onOpenDeveloperKit: { screen = .developerKit }
                 )
             case .needsFullDiskAccess(let path):
                 PermissionBannerView(path: path, onBackToHome: backToHome)
@@ -111,6 +113,21 @@ struct ContentView: View {
                     onBackToHome: backToHome
                 )
             }
+        case .developerKit:
+            // Same dead-end guard as `.inspector` above, for the same
+            // reason: `screen` and `coordinator.state` are independent.
+            if case .finished(let root) = coordinator.state {
+                DeveloperKitView(
+                    root: root,
+                    onBackToHome: backToHome,
+                    onBackToScan: { screen = .scanFlow }
+                )
+            } else {
+                ErrorStateView(
+                    message: "The scan this kit was built from is no longer available.",
+                    onBackToHome: backToHome
+                )
+            }
         }
     }
 
@@ -123,11 +140,15 @@ struct ContentView: View {
     }
 
     /// Reconciles a batch delete made from the duplicates/large-files
-    /// inspector back into the main scan tree. The inspector deletes files
-    /// directly via `FileOperations` and reports back which paths actually
-    /// succeeded (`DuplicatesView.onDeleted`) - it never touches
-    /// `coordinator`'s tree itself, since it only ever works from a
-    /// snapshot of `root` taken when it opened.
+    /// inspector (or, once it has one, the Developer Kit's own purge flow)
+    /// back into the main scan tree. Both screens delete files directly via
+    /// `FileOperations` and report back which paths actually succeeded
+    /// (`DuplicatesView.onDeleted`) - neither touches `coordinator`'s tree
+    /// itself, since each only ever works from a snapshot of `root` taken
+    /// when it opened. `removingNode(atPath:)` already no-ops correctly for
+    /// a path outside `currentRoot` (e.g. a global cache like Homebrew's,
+    /// deleted while a narrower folder scan is showing), so this same
+    /// reconciler needs no per-caller branching.
     ///
     /// No pruning needed here for `MainContentView`'s own `expandedPaths` /
     /// `backStack` / `forwardStack`: leaving `.scanFlow` for `.inspector`
@@ -433,6 +454,7 @@ struct MainContentView: View {
     let onBackToHome: () -> Void
     let onRescan: () -> Void
     let onOpenInspector: () -> Void
+    let onOpenDeveloperKit: () -> Void
 
     // Owned here rather than in `FileTreeListView`: the delete alert below is
     // triggered from the toolbar (acting on `selectedNode`), not from a
@@ -614,6 +636,15 @@ struct MainContentView: View {
                         Label("Find Duplicates", systemImage: "doc.on.doc")
                     }
                     .help("Find duplicate and large files in this scan")
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        onOpenDeveloperKit()
+                    } label: {
+                        Label("Developer Kit", systemImage: "hammer")
+                    }
+                    .help("Find reclaimable developer and creative-app caches")
                 }
 
                 ToolbarItem(placement: .primaryAction) {
