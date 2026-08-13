@@ -18,6 +18,11 @@ struct DeveloperKitView: View {
 
     @State private var scanner = PurgeScanner()
     @State private var selection = PurgeSelection()
+    // Listed independently of `scanner`/`PurgeScanState`: an archive never
+    // becomes a `PurgeTarget` (see `ArchivesSummaryCardView`'s doc comment),
+    // so it has no reason to share the main measure pipeline's state shape.
+    @State private var archives: [XcodeArchive] = []
+    @State private var showArchivesList = false
 
     private let columns = [GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 16)]
 
@@ -35,6 +40,10 @@ struct DeveloperKitView: View {
         .navigationTitle("Developer Kit")
         .toolbar { toolbarContent }
         .task { scanner.measure(in: root) }
+        .task { archives = await XcodeArchiveLister.listArchives(in: root) }
+        .sheet(isPresented: $showArchivesList) {
+            XcodeArchivesListView(archives: archives)
+        }
     }
 
     // MARK: - Header
@@ -137,6 +146,26 @@ struct DeveloperKitView: View {
     private func grid(for categories: [PurgeCategory]) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                if !archives.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "archivebox")
+                                .foregroundStyle(Color.accentColor)
+                            Text("Xcode Archives")
+                                .font(DustEaterTheme.Typography.headline)
+                            Spacer()
+                        }
+
+                        LazyVGrid(columns: columns, spacing: 16) {
+                            ArchivesSummaryCardView(
+                                archiveCount: archives.count,
+                                totalBytes: archives.reduce(0) { $0 + $1.sizeBytes },
+                                onBrowse: { showArchivesList = true }
+                            )
+                        }
+                    }
+                }
+
                 ForEach(categories) { category in
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 8) {
