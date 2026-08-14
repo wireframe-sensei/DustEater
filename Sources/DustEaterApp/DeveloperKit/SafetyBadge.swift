@@ -33,7 +33,7 @@ struct SafetyBadge: View {
             }
             Text(label)
         }
-        .font(.caption2.weight(.medium))
+        .font(.system(size: 9, weight: .medium))
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .foregroundStyle(tint)
