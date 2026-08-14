@@ -92,6 +92,11 @@ struct TargetDetailsSheet: View {
     let target: PurgeTarget
     @Environment(\.dismiss) private var dismiss
 
+    private var isAppRunning: Bool {
+        guard let bundleID = target.definition.blockingAppBundleID else { return false }
+        return FileOperations.isAppRunning(bundleIdentifier: bundleID)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -106,13 +111,85 @@ struct TargetDetailsSheet: View {
             }
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Description
                     Text(target.definition.detail)
                         .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.primary)
 
-                    if let rebuildCommand = target.definition.rebuildCommand {
+                    Divider()
+
+                    // Size
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Size")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text(ByteFormatter.string(fromBytes: target.sizeBytes))
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.primary)
+                    }
+
+                    Divider()
+
+                    // Safety Level
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Safety Level")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        SafetyBadge(level: target.safety)
+                    }
+
+                    Divider()
+
+                    // Path
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Location")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text(target.path)
+                            .font(.system(size: 11, weight: .regular, design: .monospaced))
+                            .foregroundStyle(.primary)
+                            .lineLimit(3)
+                            .truncationMode(.middle)
+                    }
+
+                    Divider()
+
+                    // App Status
+                    if target.definition.blockingAppBundleID != nil {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("App Status")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                Image(systemName: isAppRunning ? "circle.fill" : "circle")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(isAppRunning ? .orange : .secondary)
+                                Text(isAppRunning ? "Running (delete will be skipped)" : "Not running")
+                                    .font(.system(size: 13, weight: .regular))
+                                    .foregroundStyle(isAppRunning ? .orange : .secondary)
+                            }
+                        }
+
                         Divider()
+                    }
+
+                    // Hint
+                    if let hint = target.definition.hint {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Note")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Text(hint)
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundStyle(.primary)
+                        }
+
+                        Divider()
+                    }
+
+                    // Rebuild Command
+                    if let rebuildCommand = target.definition.rebuildCommand {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Rebuild with:")
                                 .font(.system(size: 12, weight: .medium))
@@ -123,6 +200,7 @@ struct TargetDetailsSheet: View {
                                 .padding(8)
                                 .background(Color(nsColor: .controlBackgroundColor))
                                 .cornerRadius(4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
@@ -132,6 +210,6 @@ struct TargetDetailsSheet: View {
             Spacer()
         }
         .padding(20)
-        .frame(minWidth: 400, minHeight: 300)
+        .frame(minWidth: 500, minHeight: 400)
     }
 }
