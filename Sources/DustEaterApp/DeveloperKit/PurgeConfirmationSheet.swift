@@ -118,7 +118,7 @@ struct PurgeConfirmationSheet: View {
     private var byteCounter: some View {
         VStack(spacing: 8) {
             Text("You'll recover")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             Text(ByteFormatter.string(fromBytes: displayedBytes))
                 .font(.system(.title2, design: .monospaced))
@@ -157,7 +157,7 @@ struct PurgeConfirmationSheet: View {
     private var rebuildCommandsList: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Rebuild afterward with:")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             ForEach(rebuildCommands, id: \.self) { command in
                 Text(command)

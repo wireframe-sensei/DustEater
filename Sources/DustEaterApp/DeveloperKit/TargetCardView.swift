@@ -18,7 +18,7 @@ struct TargetCardView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(target.definition.title)
-                    .font(.control)
+                    .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Spacer()
@@ -31,13 +31,13 @@ struct TargetCardView: View {
                 .contentTransition(.numericText())
 
             Text(target.definition.detail)
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
             if let rebuildCommand = target.definition.rebuildCommand {
                 Text("Rebuilt by: \(rebuildCommand)")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }

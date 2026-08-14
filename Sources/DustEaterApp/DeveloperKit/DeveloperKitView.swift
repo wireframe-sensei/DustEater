@@ -104,7 +104,7 @@ struct DeveloperKitView: View {
                 if let loadedCategories {
                     let reclaimable = loadedCategories.reduce(Int64(0)) { $0 + $1.reclaimableBytes }
                     Text("\(ByteFormatter.string(fromBytes: reclaimable)) reclaimable across \(loadedCategories.count) categories")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -115,7 +115,7 @@ struct DeveloperKitView: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("\(selection.count) selected")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                         Text(ByteFormatter.string(fromBytes: selection.reclaimableBytes(across: loadedCategories)))
                             .font(.control)
@@ -236,7 +236,7 @@ struct DeveloperKitView: View {
                                 .font(DustEaterTheme.Typography.headline)
                             Spacer()
                             Text("\(ByteFormatter.string(fromBytes: category.reclaimableBytes)) reclaimable of \(ByteFormatter.string(fromBytes: category.totalBytes)) found")
-                                .font(.caption)
+                                .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
 
