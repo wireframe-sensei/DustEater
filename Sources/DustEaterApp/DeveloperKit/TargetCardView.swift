@@ -70,7 +70,7 @@ struct TargetCardView: View {
                     Label("View Details", systemImage: "info.circle")
                 }
                 .font(.system(size: 13, weight: .medium))
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .controlSize(.small)
 
                 Button {
@@ -79,7 +79,7 @@ struct TargetCardView: View {
                     Label("Delete", systemImage: "trash")
                 }
                 .font(.system(size: 13, weight: .medium))
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .tint(.red)
                 .controlSize(.small)
             }
