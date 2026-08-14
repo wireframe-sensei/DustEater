@@ -50,6 +50,10 @@ struct TargetCardView: View {
         .frame(minHeight: 150)
         .padding(16)
         .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
+        .overlay(
+            RoundedRectangle(cornerRadius: metrics.cornerRadius)
+                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.2), lineWidth: 1)
+        )
     }
 
     @ViewBuilder

@@ -60,6 +60,8 @@ struct DeveloperKitView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 16)]
 
+    @Environment(\.controlMetrics) private var metrics
+
     private var loadedCategories: [PurgeCategory]? {
         if case .loaded(let categories) = scanner.state { return categories }
         return nil
@@ -133,6 +135,7 @@ struct DeveloperKitView: View {
             }
         }
         .padding(16)
+        .glassBackground(.regularMaterial, cornerRadius: metrics.cornerRadius)
     }
 
     // MARK: - Content

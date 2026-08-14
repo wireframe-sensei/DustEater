@@ -28,6 +28,7 @@ struct PurgeConfirmationSheet: View {
 
     @State private var displayedBytes: Int64 = 0
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.controlMetrics) private var metrics
 
     private var safeCount: Int { targets.filter { $0.safety == .safe }.count }
     private var rebuildableCount: Int { targets.filter { $0.safety == .rebuildable }.count }
@@ -126,8 +127,7 @@ struct PurgeConfirmationSheet: View {
         }
         .frame(maxWidth: .infinity)
         .padding(16)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(8)
+        .glassBackground(.regularMaterial, cornerRadius: 8)
     }
 
     private var breakdown: some View {
@@ -167,8 +167,7 @@ struct PurgeConfirmationSheet: View {
             }
         }
         .padding(12)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .cornerRadius(8)
+        .glassBackground(.regularMaterial, cornerRadius: 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
