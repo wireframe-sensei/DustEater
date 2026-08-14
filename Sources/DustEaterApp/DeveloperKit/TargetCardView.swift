@@ -64,6 +64,7 @@ struct TargetCardView: View {
             .controlSize(.small)
         } else {
             HStack(spacing: 8) {
+                Spacer()
                 Button {
                     showDetails = true
                 } label: {
