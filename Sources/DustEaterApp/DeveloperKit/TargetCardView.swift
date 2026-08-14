@@ -2,23 +2,19 @@ import SwiftUI
 import AppKit
 import DustEaterCore
 
-/// One purge target's card: title, measured size, safety badge, a one-line
-/// explanation, a rebuild footnote when relevant, and either a toggle or a
-/// Reveal-in-Finder action - never both. `.reportOnly` targets never get a
-/// toggle at all; see `PurgeSelection.toggle` for the matching hard refusal
-/// at the data layer.
 struct TargetCardView: View {
     let target: PurgeTarget
-    let isSelected: Bool
-    let onToggle: () -> Void
+    let onDelete: () -> Void
 
     @Environment(\.controlMetrics) private var metrics
+    @State private var showDetails = false
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text(target.definition.title)
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Spacer()
@@ -29,18 +25,6 @@ struct TargetCardView: View {
                 .font(.system(.title3, design: .monospaced).weight(.semibold))
                 .foregroundStyle(.primary)
                 .contentTransition(.numericText())
-
-            Text(target.definition.detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-
-            if let rebuildCommand = target.definition.rebuildCommand {
-                Text("Rebuilt by: \(rebuildCommand)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
 
             Spacer(minLength: 0)
 
@@ -54,37 +38,99 @@ struct TargetCardView: View {
             RoundedRectangle(cornerRadius: metrics.cornerRadius)
                 .strokeBorder(Color(nsColor: .separatorColor).opacity(0.2), lineWidth: 1)
         )
+        .sheet(isPresented: $showDetails) {
+            TargetDetailsSheet(target: target)
+        }
+        .alert("Delete \(target.definition.title)?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                onDelete()
+            }
+        } message: {
+            Text("This action cannot be undone.")
+        }
     }
 
     @ViewBuilder
     private var footer: some View {
         if target.safety == .reportOnly {
-            VStack(alignment: .leading, spacing: 4) {
-                if let hint = target.definition.hint {
-                    Text(hint)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                }
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: target.path)])
+            } label: {
+                Label("Reveal in Finder", systemImage: "folder")
+            }
+            .font(.system(size: 13, weight: .medium))
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        } else {
+            HStack(spacing: 8) {
                 Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: target.path)])
+                    showDetails = true
                 } label: {
-                    Label("Reveal in Finder", systemImage: "folder")
+                    Label("View Details", systemImage: "info.circle")
                 }
-                .font(.control)
+                .font(.system(size: 13, weight: .medium))
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-            }
-        } else {
-            HStack {
-                Spacer()
-                Toggle(
-                    "Include in purge",
-                    isOn: Binding(get: { isSelected }, set: { _ in onToggle() })
-                )
-                .toggleStyle(.checkbox)
-                .labelsHidden()
+
+                Button {
+                    showDeleteConfirmation = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .font(.system(size: 13, weight: .medium))
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .controlSize(.small)
             }
         }
+    }
+}
+
+struct TargetDetailsSheet: View {
+    let target: PurgeTarget
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text(target.definition.title)
+                    .font(.system(size: 17, weight: .semibold))
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(target.definition.detail)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(.primary)
+
+                    if let rebuildCommand = target.definition.rebuildCommand {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Rebuild with:")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Text(rebuildCommand)
+                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .foregroundStyle(.primary)
+                                .padding(8)
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .cornerRadius(4)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Spacer()
+        }
+        .padding(20)
+        .frame(minWidth: 400, minHeight: 300)
     }
 }

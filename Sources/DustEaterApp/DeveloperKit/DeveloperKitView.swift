@@ -100,7 +100,7 @@ struct DeveloperKitView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Developer & Creative Clean Up Kit")
-                    .font(DustEaterTheme.Typography.headline)
+                    .font(DustEaterTheme.Typography.title2)
                 if let loadedCategories {
                     let reclaimable = loadedCategories.reduce(Int64(0)) { $0 + $1.reclaimableBytes }
                     Text("\(ByteFormatter.string(fromBytes: reclaimable)) reclaimable across \(loadedCategories.count) categories")
@@ -213,7 +213,7 @@ struct DeveloperKitView: View {
                             Image(systemName: "archivebox")
                                 .foregroundStyle(Color.accentColor)
                             Text("Xcode Archives")
-                                .font(DustEaterTheme.Typography.headline)
+                                .font(.system(size: 16, weight: .semibold))
                             Spacer()
                         }
 
@@ -233,7 +233,7 @@ struct DeveloperKitView: View {
                             Image(systemName: category.systemImage)
                                 .foregroundStyle(Color.accentColor)
                             Text(category.title)
-                                .font(DustEaterTheme.Typography.headline)
+                                .font(.system(size: 16, weight: .semibold))
                             Spacer()
                             Text("\(ByteFormatter.string(fromBytes: category.reclaimableBytes)) reclaimable of \(ByteFormatter.string(fromBytes: category.totalBytes)) found")
                                 .font(.callout)
@@ -247,8 +247,9 @@ struct DeveloperKitView: View {
                             ForEach(category.targets.filter { $0.sizeBytes > 0 }) { target in
                                 TargetCardView(
                                     target: target,
-                                    isSelected: selection.isSelected(target),
-                                    onToggle: { selection.toggle(target) }
+                                    onDelete: {
+                                        activeSheet = .confirmPurge(targets: [target])
+                                    }
                                 )
                             }
                         }
