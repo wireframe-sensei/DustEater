@@ -33,9 +33,9 @@ struct TargetCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: 150)
         .padding(16)
-        .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
+        .glassBackground(.ultraThinMaterial, cornerRadius: 12)
         .overlay(
-            RoundedRectangle(cornerRadius: metrics.cornerRadius)
+            RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Color(nsColor: .separatorColor).opacity(0.2), lineWidth: 1)
         )
         .sheet(isPresented: $showDetails) {
@@ -61,7 +61,7 @@ struct TargetCardView: View {
             }
             .font(.system(size: 13, weight: .medium))
             .buttonStyle(.bordered)
-            .controlSize(.small)
+            .controlSize(.large)
         } else {
             HStack(spacing: 8) {
                 Spacer()
@@ -72,7 +72,7 @@ struct TargetCardView: View {
                 }
                 .font(.system(size: 13, weight: .medium))
                 .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .controlSize(.large)
 
                 Button {
                     showDeleteConfirmation = true
@@ -82,7 +82,7 @@ struct TargetCardView: View {
                 .font(.system(size: 13, weight: .medium))
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
-                .controlSize(.small)
+                .controlSize(.large)
             }
         }
     }
