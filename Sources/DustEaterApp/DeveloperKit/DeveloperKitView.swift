@@ -21,16 +21,29 @@ struct DeveloperKitView: View {
     let onDeleted: (Set<String>) -> Void
 
     /// Both sheets this screen can present, unified behind one
-    /// `.sheet(item:)` rather than two stacked `.sheet(isPresented:)`
-    /// modifiers on the same view - the latter is a known SwiftUI failure
-    /// mode (the second modifier's content closure can capture stale state)
-    /// that was the actual cause of "Purge Selected" opening a sheet
-    /// showing 0 items even though the header's own selection total, read
-    /// from the same state one line above, was correct.
+    /// `.sheet(item:)`. `confirmPurge` carries its target list *inside the
+    /// case itself* rather than through a separate `@State
+    /// pendingDeleteTargets` read from the closure - the latter shape was
+    /// tried first and is a real, confirmed SwiftUI trap: a `.sheet`
+    /// content closure can read a stale value for a *sibling* `@State` var
+    /// even when that var was set correctly, in the same synchronous
+    /// action, one line before the item itself became non-nil. Verified by
+    /// instrumenting both the toggle and the button action - the sibling
+    /// state held the right value at the moment it was set, but the sheet's
+    /// content closure still saw the array as empty. Putting the payload on
+    /// the `item` itself removes the race entirely: SwiftUI hands the
+    /// closure the exact value bound to `$activeSheet`, not a second,
+    /// independently-tracked variable it has to catch up to.
     private enum ActiveSheet: Identifiable {
         case archives
-        case confirmPurge
-        var id: Self { self }
+        case confirmPurge(targets: [PurgeTarget])
+
+        var id: String {
+            switch self {
+            case .archives: return "archives"
+            case .confirmPurge: return "confirmPurge"
+            }
+        }
     }
 
     @State private var scanner = PurgeScanner()
@@ -44,12 +57,6 @@ struct DeveloperKitView: View {
     @State private var isDeleting = false
     @State private var deleteErrorMessage: String?
     @State private var deletionProgress: PurgeDeletionProgress?
-    /// The exact targets the open confirmation sheet will act on, set
-    /// explicitly when "Purge Selected" is clicked rather than always
-    /// recomputed live from `selection` - so a selection change made while
-    /// the sheet happens to still be open (e.g. a slow retry) can't
-    /// silently change what a click on "Delete Permanently" acts on.
-    @State private var pendingDeleteTargets: [PurgeTarget] = []
 
     private let columns = [GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 16)]
 
@@ -72,14 +79,14 @@ struct DeveloperKitView: View {
             switch sheet {
             case .archives:
                 XcodeArchivesListView(archives: $archives, onDeleted: { path in onDeleted([path]) })
-            case .confirmPurge:
+            case .confirmPurge(let targets):
                 PurgeConfirmationSheet(
-                    targets: pendingDeleteTargets,
-                    totalBytesToReclaim: pendingDeleteTargets.reduce(Int64(0)) { $0 + $1.sizeBytes },
+                    targets: targets,
+                    totalBytesToReclaim: targets.reduce(Int64(0)) { $0 + $1.sizeBytes },
                     deletionProgress: deletionProgress,
                     isDeleting: $isDeleting,
                     errorMessage: $deleteErrorMessage,
-                    onConfirm: performPurge
+                    onConfirm: { permanently in performPurge(targets, permanently: permanently) }
                 )
             }
         }
@@ -114,8 +121,7 @@ struct DeveloperKitView: View {
                     }
 
                     Button {
-                        pendingDeleteTargets = selectedTargets(in: loadedCategories)
-                        activeSheet = .confirmPurge
+                        activeSheet = .confirmPurge(targets: selectedTargets(in: loadedCategories))
                     } label: {
                         Label("Purge Selected", systemImage: "trash")
                     }
@@ -323,10 +329,10 @@ struct DeveloperKitView: View {
     /// the main actor and never freezes the window. Each iteration hops
     /// back via `MainActor.run` only to report progress and, at the end, to
     /// reconcile state.
-    private func performPurge(permanently: Bool) {
+    private func performPurge(_ targets: [PurgeTarget], permanently: Bool) {
         isDeleting = true
         deleteErrorMessage = nil
-        let snapshot = pendingDeleteTargets
+        let snapshot = targets
         let total = snapshot.count
 
         Task {
