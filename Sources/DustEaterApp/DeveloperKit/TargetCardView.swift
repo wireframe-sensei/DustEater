@@ -54,14 +54,17 @@ struct TargetCardView: View {
     @ViewBuilder
     private var footer: some View {
         if target.safety == .reportOnly {
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: target.path)])
-            } label: {
-                Label("Reveal in Finder", systemImage: "folder")
+            HStack {
+                Spacer()
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: target.path)])
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
+                .font(.system(size: 13, weight: .medium))
+                .buttonStyle(.bordered)
+                .controlSize(.large)
             }
-            .font(.system(size: 13, weight: .medium))
-            .buttonStyle(.bordered)
-            .controlSize(.large)
         } else {
             HStack(spacing: 8) {
                 Spacer()
