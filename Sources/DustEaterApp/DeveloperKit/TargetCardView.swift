@@ -31,7 +31,7 @@ struct TargetCardView: View {
                 .contentTransition(.numericText())
 
             Text(target.definition.detail)
-                .font(.callout)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
