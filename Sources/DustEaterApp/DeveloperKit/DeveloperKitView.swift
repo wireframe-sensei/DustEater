@@ -247,6 +247,8 @@ struct DeveloperKitView: View {
                             ForEach(category.targets.filter { $0.sizeBytes > 0 }) { target in
                                 TargetCardView(
                                     target: target,
+                                    isSelected: selection.isSelected(target),
+                                    onToggle: { selection.toggle(target) },
                                     onDelete: {
                                         activeSheet = .confirmPurge(targets: [target])
                                     }

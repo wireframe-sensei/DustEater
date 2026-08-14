@@ -4,6 +4,8 @@ import DustEaterCore
 
 struct TargetCardView: View {
     let target: PurgeTarget
+    let isSelected: Bool
+    let onToggle: () -> Void
     let onDelete: () -> Void
 
     @Environment(\.controlMetrics) private var metrics
@@ -66,8 +68,16 @@ struct TargetCardView: View {
                 .controlSize(.large)
             }
         } else {
-            HStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Toggle(
+                    "Include in purge",
+                    isOn: Binding(get: { isSelected }, set: { _ in onToggle() })
+                )
+                .toggleStyle(.checkbox)
+                .labelsHidden()
+
                 Spacer()
+
                 Button {
                     showDetails = true
                 } label: {
