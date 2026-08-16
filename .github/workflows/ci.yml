@@ -22,3 +22,21 @@ jobs:
 
       - name: Run tests
         run: swift test -v
+
+  # Compiles against the older macOS SDK that release.yml's x86_64 job uses.
+  # Without this job, an SDK-availability break (a symbol, or a Sendable
+  # conformance, that exists on the macOS 26 SDK but not the macOS 15 one)
+  # stays invisible until a release tag is pushed - which is exactly how the
+  # v0.4.0 release failed four times. See CLAUDE.md's "SDK/toolchain gotcha".
+  build-x86_64-compat:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build (x86_64, older SDK)
+        run: swift build --arch x86_64
