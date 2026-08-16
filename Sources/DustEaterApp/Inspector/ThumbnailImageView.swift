@@ -53,7 +53,8 @@ struct ThumbnailImageView: View {
 /// same path/size (e.g. a duplicate set's hero preview and its sidebar row
 /// loading at once) share one `QLThumbnailGenerator` call instead of
 /// issuing a redundant second one.
-actor ThumbnailCache {
+@MainActor
+final class ThumbnailCache {
     static let shared = ThumbnailCache()
 
     private var cache: [String: NSImage] = [:]
