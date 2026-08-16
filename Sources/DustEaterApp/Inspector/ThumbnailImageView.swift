@@ -53,23 +53,29 @@ struct ThumbnailImageView: View {
 /// same path/size (e.g. a duplicate set's hero preview and its sidebar row
 /// loading at once) share one `QLThumbnailGenerator` call instead of
 /// issuing a redundant second one.
+
+/// Wrapper to work around NSImage Sendable availability on older macOS SDKs.
+private struct SendableTask: @unchecked Sendable {
+    let task: Task<NSImage?, Never>
+}
+
 actor ThumbnailCache {
     static let shared = ThumbnailCache()
 
     private var cache: [String: NSImage] = [:]
-    private var inFlight: [String: Task<NSImage?, Never>] = [:]
+    private var inFlight: [String: SendableTask] = [:]
 
     func thumbnail(forPath path: String, size: CGFloat) async -> NSImage? {
         guard ImageFileDetector.isImage(atPath: path) else { return nil }
 
         let key = "\(path)#\(Int(size))"
         if let cached = cache[key] { return cached }
-        if let existing = inFlight[key] { return await existing.value }
+        if let existing = inFlight[key] { return await existing.task.value }
 
         let task = Task<NSImage?, Never> {
             await Self.generate(path: path, size: size)
         }
-        inFlight[key] = task
+        inFlight[key] = SendableTask(task: task)
         let result = await task.value
         inFlight[key] = nil
         if let result {
