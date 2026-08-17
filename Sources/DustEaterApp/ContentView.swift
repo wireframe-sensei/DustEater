@@ -7,14 +7,10 @@ struct ContentView: View {
         case home
         case scanFlow
         case appManager
-        case inspector
-        case developerKit
     }
 
     @State private var screen: TopLevelScreen = .home
     @State private var coordinator = ScanCoordinator()
-    @State private var selectedPath: String?
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var selectedTheme: ColorTheme = .weighted
     @State private var totalDiskSize: Int64 = 0
     // Plain reference type held for stable identity across body
@@ -24,6 +20,9 @@ struct ContentView: View {
     // "modifying state during view update" hazard a `@State`-backed cache
     // would.
     @State private var treemapCache = TreemapCache()
+    // Set once, the first time `.home` would otherwise be shown, so a
+    // rescan or a return from a scan never re-triggers the auto-skip.
+    @State private var hasCheckedAutoSkip = false
 
     private func treemapRects(for size: CGSize) -> [TreemapRect] {
         guard case .finished(let root) = coordinator.state else { return [] }
@@ -45,6 +44,13 @@ struct ContentView: View {
                     screen = .appManager
                 }
             )
+            .task {
+                guard !hasCheckedAutoSkip else { return }
+                hasCheckedAutoSkip = true
+                if let onlyVolumePath = Self.onlyEligibleVolumePath() {
+                    startScan(path: onlyVolumePath)
+                }
+            }
         case .scanFlow:
             switch coordinator.state {
             case .idle:
@@ -75,18 +81,15 @@ struct ContentView: View {
                     backToHome()
                 })
             case .finished(let root):
-                MainContentView(
+                CleanupShellView(
                     root: root,
-                    selectedPath: $selectedPath,
                     coordinator: coordinator,
                     treemapRects: treemapRects(for:),
-                    columnVisibility: $columnVisibility,
-                    selectedTheme: $selectedTheme,
                     treemapCache: treemapCache,
+                    selectedTheme: $selectedTheme,
                     onBackToHome: backToHome,
-                    onRescan: { startScan(path: root.path) },
-                    onOpenInspector: { screen = .inspector },
-                    onOpenDeveloperKit: { screen = .developerKit }
+                    onScanFolder: chooseFolder,
+                    onRescan: { startScan(path: root.path) }
                 )
             case .needsFullDiskAccess(let path):
                 PermissionBannerView(path: path, onBackToHome: backToHome)
@@ -95,86 +98,41 @@ struct ContentView: View {
             }
         case .appManager:
             AppManagerView(onBackToHome: backToHome)
-        case .inspector:
-            // `screen` and `coordinator.state` are independent - a
-            // cancelled or superseded scan can strand this case, so this
-            // isn't defensive noise, it's the actual dead-end guard for
-            // reaching `.inspector` with nothing to inspect.
-            if case .finished(let root) = coordinator.state {
-                DuplicatesView(
-                    root: root,
-                    onBackToHome: backToHome,
-                    onBackToScan: { screen = .scanFlow },
-                    onDeleted: handleInspectorDeleted
-                )
-            } else {
-                ErrorStateView(
-                    message: "The scan this inspector was built from is no longer available.",
-                    onBackToHome: backToHome
-                )
-            }
-        case .developerKit:
-            // Same dead-end guard as `.inspector` above, for the same
-            // reason: `screen` and `coordinator.state` are independent.
-            if case .finished(let root) = coordinator.state {
-                DeveloperKitView(
-                    root: root,
-                    onBackToHome: backToHome,
-                    onBackToScan: { screen = .scanFlow },
-                    onDeleted: handleInspectorDeleted
-                )
-            } else {
-                ErrorStateView(
-                    message: "The scan this kit was built from is no longer available.",
-                    onBackToHome: backToHome
-                )
-            }
         }
+    }
+
+    /// The design handoff's disk picker collapses into the sidebar and is
+    /// skipped entirely when there's only one volume to scan. Duplicates
+    /// `DiskHomeView.loadDisks`'s volume filter rather than sharing it - two
+    /// call sites, and CLAUDE.md's Rule of Three says wait for a third
+    /// before extracting.
+    private static func onlyEligibleVolumePath() -> String? {
+        guard let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil) else {
+            return nil
+        }
+
+        let eligiblePaths = urls.map(\.path).filter { path in
+            !path.contains("/System/Volumes/") &&
+            !path.contains("/.") &&
+            !path.contains("/Library/Developer/CoreSimulator/") &&
+            !path.contains("SimRuntimeBundle") &&
+            !path.contains("iOS_") &&
+            !path.contains("watchOS_") &&
+            !path.contains("tvOS_")
+        }
+
+        return eligiblePaths.count == 1 ? eligiblePaths.first : nil
     }
 
     /// Shared by every "leave this scan and return to the disk picker" exit
-    /// point - `MainContentView`'s toolbar, and the two terminal failure
+    /// point - the shell's sidebar footer, and the two terminal failure
     /// screens below, which previously had no way back at all.
     private func backToHome() {
         screen = .home
-        selectedPath = nil
-    }
-
-    /// Reconciles a batch delete made from the duplicates/large-files
-    /// inspector (or, once it has one, the Developer Kit's own purge flow)
-    /// back into the main scan tree. Both screens delete files directly via
-    /// `FileOperations` and report back which paths actually succeeded
-    /// (`DuplicatesView.onDeleted`) - neither touches `coordinator`'s tree
-    /// itself, since each only ever works from a snapshot of `root` taken
-    /// when it opened. `removingNode(atPath:)` already no-ops correctly for
-    /// a path outside `currentRoot` (e.g. a global cache like Homebrew's,
-    /// deleted while a narrower folder scan is showing), so this same
-    /// reconciler needs no per-caller branching.
-    ///
-    /// No pruning needed here for `MainContentView`'s own `expandedPaths` /
-    /// `backStack` / `forwardStack`: leaving `.scanFlow` for `.inspector`
-    /// already tears down that view's `@State`, so returning to the
-    /// treemap starts all three fresh regardless of what was deleted.
-    private func handleInspectorDeleted(_ deletedPaths: Set<String>) {
-        guard case .finished(var currentRoot) = coordinator.state else { return }
-
-        for path in deletedPaths {
-            if let updated = currentRoot.removingNode(atPath: path) {
-                currentRoot = updated
-            }
-        }
-
-        coordinator.updateTree(currentRoot)
-        treemapCache.invalidate()
-
-        if let selectedPath, deletedPaths.contains(selectedPath) {
-            self.selectedPath = nil
-        }
     }
 
     private func startScan(path: String) {
         screen = .scanFlow
-        selectedPath = nil
         coordinator.zoomNode = nil
 
         // Get total disk size
@@ -198,7 +156,6 @@ struct ContentView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         screen = .scanFlow
-        selectedPath = nil
         coordinator.zoomNode = nil
 
         // Get total disk size
@@ -214,7 +171,7 @@ struct ContentView: View {
 
 /// Memoized squarified-treemap layout, keyed on which node is displayed and
 /// at what size. `treemapRects(for:)` used to redo the full sort + `YMTreeMap`
-/// tessellation on *every* `MainContentView` body evaluation - including ones
+/// tessellation on *every* `CleanupShellView` body evaluation - including ones
 /// triggered by something as unrelated as a sidebar selection change - even
 /// though the layout only actually changes when the displayed node or the
 /// available size changes. A plain (non-`Observable`) class rather than
@@ -443,345 +400,3 @@ struct ErrorStateView: View {
     }
 }
 
-// MARK: - Main Content
-struct MainContentView: View {
-    let root: FileNode
-    @Binding var selectedPath: String?
-    let coordinator: ScanCoordinator
-    let treemapRects: (CGSize) -> [TreemapRect]
-    @Binding var columnVisibility: NavigationSplitViewVisibility
-    @Binding var selectedTheme: ColorTheme
-    let treemapCache: TreemapCache
-    let onBackToHome: () -> Void
-    let onRescan: () -> Void
-    let onOpenInspector: () -> Void
-    let onOpenDeveloperKit: () -> Void
-
-    // Owned here rather than in `FileTreeListView`: the delete alert below is
-    // triggered from the toolbar (acting on `selectedNode`), not from a
-    // per-row control, so the state it mutates - including pruning
-    // `expandedPaths` - has to live where the toolbar does. Scoped to
-    // `MainContentView` rather than hoisted further up to `ContentView`: it
-    // only matters in the `.finished` state, and letting it die when that
-    // case is left is exactly the "new scan starts collapsed" behavior we want.
-    @State private var expandedPaths: Set<String> = []
-    @State private var showDeleteAlert = false
-    @State private var itemToDelete: FileNode?
-    // Delete used to fail (or succeed) completely silently - `print()` to a
-    // console the user never sees, tree/UI otherwise unchanged, so a failed
-    // delete looked identical to one that just hadn't been clicked. This
-    // surfaces the actual outcome.
-    @State private var deleteErrorMessage: String?
-    // Browser-style zoom history, like Finder/Safari/Xcode's Back/Forward -
-    // not a strict "go to parent" stack, since a jump can come from the
-    // sidebar (any directory, any depth) as well as drilling into the
-    // treemap. `nil` represents the unzoomed overview. Scoped here for the
-    // same reason as `expandedPaths` above: it should reset when a new scan
-    // replaces this view's subtree, not persist across scans.
-    @State private var backStack: [FileNode?] = []
-    @State private var forwardStack: [FileNode?] = []
-
-    private var selectedNode: FileNode? {
-        guard let selectedPath else { return nil }
-        return root.node(atPath: selectedPath)
-    }
-
-    var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            // Sidebar: File tree for navigation
-            FileTreeListView(root: root, selectedPath: $selectedPath, onSelectNode: { node in
-                // Only zoom into directories, not files
-                if node.isDirectory {
-                    navigate(to: node)
-                }
-                // Files just get highlighted in the current view
-            }, expandedPaths: $expandedPaths)
-            .navigationSplitViewColumnWidth(min: 280, ideal: 300, max: 350)
-        } detail: {
-            // Main treemap with hierarchical levels
-            VStack(spacing: 0) {
-                // Hierarchical treemap or file details
-                if let selectedNode = selectedNode, !selectedNode.isDirectory {
-                    // Show file details when a file is selected
-                    FileDetailsView(node: selectedNode, root: root)
-                } else {
-                    // Show treemap for directories and overview
-                    GeometryReader { geometry in
-                        TreemapView(
-                            rects: treemapRects(geometry.size),
-                            onSelectNode: { node in
-                                if node.isDirectory {
-                                    navigate(to: node)
-                                } else {
-                                    // Selection is recorded for any node so
-                                    // the sidebar can reveal it; zooming
-                                    // stays folders-only.
-                                    selectedPath = node.path
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-            .navigationTitle(coordinator.zoomNode?.name ?? root.name)
-            .navigationSubtitle("Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        onBackToHome()
-                    } label: {
-                        Label("Home", systemImage: "house")
-                    }
-                    .help("Back to home screen")
-                }
-
-                // Jumps straight to the unzoomed overview, regardless of how
-                // deep the current zoom is - distinct from Home (which leaves
-                // this scan entirely) and from Back (which retraces history
-                // one step at a time). Goes through `navigate(to:)` like any
-                // other zoom change, so it's still undoable with Back - this
-                // is exactly what the Back button itself used to do before
-                // Back/Forward became real history.
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        navigate(to: nil)
-                    } label: {
-                        Image(systemName: "arrow.up.to.line")
-                    }
-                    .disabled(coordinator.zoomNode == nil)
-                    .help("Go to overview")
-                }
-
-                // Back/Forward through zoom history, grouped together as one
-                // unit - the same shape Finder, Safari, and Xcode use, kept
-                // separate from the Home button above (Home always returns
-                // to the disk picker; these move through folder history).
-                ToolbarItemGroup(placement: .navigation) {
-                    Button {
-                        navigateBack()
-                    } label: {
-                        Image(systemName: "chevron.backward")
-                    }
-                    .disabled(backStack.isEmpty)
-                    .keyboardShortcut("[", modifiers: .command)
-                    .help("Go back")
-
-                    Button {
-                        navigateForward()
-                    } label: {
-                        Image(systemName: "chevron.forward")
-                    }
-                    .disabled(forwardStack.isEmpty)
-                    .keyboardShortcut("]", modifiers: .command)
-                    .help("Go forward")
-                }
-
-                // Only appears when `FileSystemWatcher` (owned by
-                // `ScanCoordinator`) detects a filesystem change under the
-                // scanned root - external changes are rare, unlike selection
-                // changes below, so a small conditional pop-in here is the
-                // right trade-off rather than a permanently-disabled button.
-                if coordinator.hasDetectedChanges {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            onRescan()
-                        } label: {
-                            Label("Rescan", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .tint(.orange)
-                        .help("Files on disk have changed since this scan - click to rescan")
-                    }
-                }
-
-                // Actions for the current selection. Disabled rather than
-                // hidden when nothing is selected, so the toolbar doesn't
-                // reflow every time selection changes - the same failure mode
-                // this pattern replaced (a per-row `Menu`, which is what
-                // crushed sidebar names down to a few characters; see
-                // FileTreeListView.swift).
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button {
-                        revealInFinder()
-                    } label: {
-                        Label("Reveal in Finder", systemImage: "folder")
-                    }
-                    .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
-                    .help("Reveal the selected item in Finder")
-
-                    Button {
-                        copyPath()
-                    } label: {
-                        Label("Copy Path", systemImage: "square.on.square")
-                    }
-                    .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
-                    .help("Copy the selected item's full path")
-
-                    Button(role: .destructive) {
-                        itemToDelete = selectedNode
-                        showDeleteAlert = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .disabled((selectedNode?.isSyntheticGroupingNode ?? false) || selectedNode.map { !FileOperations.canDelete(at: $0.path) } ?? true)
-                    .help("Move the selected item to the Trash, or delete it permanently")
-                }
-
-                // A headline feature gets its own toolbar button rather
-                // than burial in a menu.
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        onOpenInspector()
-                    } label: {
-                        Label("Find Duplicates", systemImage: "doc.on.doc")
-                    }
-                    .help("Find duplicate and large files in this scan")
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        onOpenDeveloperKit()
-                    } label: {
-                        Label("Developer Kit", systemImage: "hammer")
-                    }
-                    .help("Find reclaimable developer and creative-app caches")
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        ForEach(ColorTheme.allCases, id: \.self) { theme in
-                            Button {
-                                selectedTheme = theme
-                            } label: {
-                                HStack {
-                                    Text(theme.displayName)
-                                        .font(.control)
-                                    if theme == selectedTheme {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        Label(selectedTheme.displayName, systemImage: "paintpalette")
-                    }
-                    .help("Change color theme")
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                    } label: {
-                        Label("Info", systemImage: "info.circle")
-                    }
-                    .help("Folder sizes are approximate. Hard-linked files and deduplication mean the sum will exceed actual disk usage. True usage is shown on home screen.")
-                }
-            }
-        }
-        .alert("Delete Item", isPresented: $showDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Move to Trash", role: .destructive) {
-                if let node = itemToDelete {
-                    deleteItem(node, permanently: false)
-                }
-            }
-            Button("Delete Permanently", role: .destructive) {
-                if let node = itemToDelete {
-                    deleteItem(node, permanently: true)
-                }
-            }
-        } message: {
-            if let node = itemToDelete {
-                Text("Are you sure you want to delete \"\(node.name)\"?")
-            }
-        }
-        .alert("Couldn't Delete Item", isPresented: Binding(
-            get: { deleteErrorMessage != nil },
-            set: { isPresented in if !isPresented { deleteErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(deleteErrorMessage ?? "")
-        }
-    }
-
-    /// Zooms to `node` (or `nil` for the overview) and records the *current*
-    /// zoom on the back stack first - the shared entry point every
-    /// zoom-triggering gesture (treemap click, sidebar click) should call,
-    /// so history stays consistent regardless of where the navigation came
-    /// from. Starting a new path forward from here invalidates whatever was
-    /// in `forwardStack`, same as a browser: it only replays a `navigate`
-    /// that was itself undone by `navigateBack()`.
-    private func navigate(to node: FileNode?) {
-        guard node?.path != coordinator.zoomNode?.path else { return }
-        backStack.append(coordinator.zoomNode)
-        forwardStack.removeAll()
-        coordinator.zoomNode = node
-        selectedPath = node?.path
-    }
-
-    private func navigateBack() {
-        guard let previous = backStack.popLast() else { return }
-        forwardStack.append(coordinator.zoomNode)
-        coordinator.zoomNode = previous
-        selectedPath = previous?.path
-    }
-
-    private func navigateForward() {
-        guard let next = forwardStack.popLast() else { return }
-        backStack.append(coordinator.zoomNode)
-        coordinator.zoomNode = next
-        selectedPath = next?.path
-    }
-
-    private func revealInFinder() {
-        guard let selectedNode else { return }
-        // `activateFileViewerSelecting` reveals *and* selects the item. The
-        // old per-row menu called `selectFile(nil, inFileViewerRootedAtPath:)`,
-        // which only opens the parent folder without selecting anything -
-        // fixed here, not just relocated.
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: selectedNode.path)])
-    }
-
-    private func copyPath() {
-        guard let selectedNode else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(selectedNode.path, forType: .string)
-    }
-
-    private func deleteItem(_ node: FileNode, permanently: Bool) {
-        do {
-            try FileOperations.delete(at: node.path, permanently: permanently)
-            handleItemDeleted(node.path)
-        } catch {
-            deleteErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func handleItemDeleted(_ deletedPath: String) {
-        guard case .finished(let currentRoot) = coordinator.state else { return }
-
-        if let updatedRoot = currentRoot.removingNode(atPath: deletedPath) {
-            coordinator.updateTree(updatedRoot)
-            treemapCache.invalidate()
-
-            if let zoomNode = coordinator.zoomNode, deletedPath == zoomNode.path {
-                coordinator.zoomNode = nil
-                selectedPath = nil
-            }
-
-            if selectedPath == deletedPath {
-                selectedPath = nil
-            }
-
-            // Drop the deleted subtree from expansion state so a later
-            // re-scan can't resurrect stale open branches for paths that no
-            // longer exist in the tree.
-            expandedPaths = expandedPaths.filter { !$0.hasPrefix(deletedPath) }
-
-            // Same idea for zoom history: Back/Forward must never be able to
-            // land on a node that no longer exists.
-            backStack = backStack.filter { $0.map { !$0.path.hasPrefix(deletedPath) } ?? true }
-            forwardStack = forwardStack.filter { $0.map { !$0.path.hasPrefix(deletedPath) } ?? true }
-        }
-    }
-}

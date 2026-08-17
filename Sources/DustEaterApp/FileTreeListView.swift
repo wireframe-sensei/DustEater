@@ -5,9 +5,9 @@ struct FileTreeListView: View {
     let root: FileNode
     @Binding var selectedPath: String?
     let onSelectNode: (FileNode) -> Void
-    // Owned by `MainContentView` now, not here - the delete alert (and the
+    // Owned by `CleanupShellView` now, not here - the delete alert (and the
     // toolbar actions that trigger it) live at that level, and `deleteItem`
-    // there needs to prune this set. See ContentView.swift.
+    // there needs to prune this set. See Cleanup/CleanupShellView.swift.
     @Binding var expandedPaths: Set<String>
 
     var body: some View {
@@ -138,7 +138,7 @@ struct FileRowView: View {
         // pull-down button with a menu indicator, regardless of the frame
         // it's given, and at sidebar width that button alone crushed every
         // name down to two or three characters. Actions for the selected
-        // item live in the window toolbar instead (see MainContentView) -
+        // item live in the window toolbar instead (see CleanupShellView) -
         // a genuinely native pattern (Finder, Mail, Photos all work this
         // way), and it costs this row nothing.
         HStack(spacing: DustEaterTheme.Spacing.sm) {
