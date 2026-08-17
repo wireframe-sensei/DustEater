@@ -130,3 +130,30 @@ public final class AppManagerScanner {
         state = .loaded(installed: installed, orphaned: orphaned, developerTools: developerTools)
     }
 }
+
+extension AppManagerScanner {
+    /// Headless variant of `scan()`, for a caller that only wants installed
+    /// apps with no `@Observable` progress to watch and no need for orphan
+    /// detection - `CleanupScanner`'s "applications unopened in over a year"
+    /// finding, the only current caller. Silently returns an empty list on a
+    /// permission failure rather than surfacing a distinct error state: the
+    /// finding just doesn't appear, matching every other finding's
+    /// disappear-when-empty behavior, and permission onboarding is out of
+    /// scope here (see the design handoff's item 7).
+    public static func scanInstalledApps() async -> [AppDiskEntity] {
+        guard AttrListBulkReader.probeAccess(atPath: "/Applications") == 0 else { return [] }
+
+        var allAppNodes: [FileNode] = []
+        let scanner = DiskScanner()
+        let applicationsRoot = await scanner.scan(rootPath: "/Applications")
+        allAppNodes.append(contentsOf: AppGrouper.findAppBundles(in: applicationsRoot))
+
+        let homeApplications = (NSHomeDirectory() as NSString).appendingPathComponent("Applications")
+        if FileManager.default.fileExists(atPath: homeApplications) {
+            let homeAppsRoot = await scanner.scan(rootPath: homeApplications)
+            allAppNodes.append(contentsOf: AppGrouper.findAppBundles(in: homeAppsRoot))
+        }
+
+        return await AppGrouper.buildAppDiskEntities(from: allAppNodes)
+    }
+}

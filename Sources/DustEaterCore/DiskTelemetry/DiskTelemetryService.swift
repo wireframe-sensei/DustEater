@@ -39,6 +39,15 @@ public final class DiskTelemetryService {
 
     public init() {}
 
+    /// Purgeable bytes for one specific volume, without gathering full
+    /// physical-disk health for every mounted volume the way `refresh()`
+    /// does - the Cleanup sidebar's disk-context line only ever needs this
+    /// one number for the volume currently being scanned.
+    public static func purgeableBytes(atPath path: String) -> Int64 {
+        guard let snapshot = APFSVolumeMetrics.capacitySnapshot(atPath: path) else { return 0 }
+        return APFSVolumeMetrics.purgeableBytes(from: snapshot)
+    }
+
     public func refresh() {
         refreshTask?.cancel()
 

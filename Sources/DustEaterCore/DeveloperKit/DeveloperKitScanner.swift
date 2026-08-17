@@ -196,3 +196,30 @@ public final class PurgeScanner {
         return PurgeTarget(definition: definition, sizeBytes: node.size)
     }
 }
+
+extension PurgeScanner {
+    /// Headless variant of `measure(in:)` for a caller that only wants the
+    /// final `[PurgeCategory]`, with no `@Observable` progress to watch -
+    /// `CleanupScanner`, composing this alongside several other sources,
+    /// being the only current caller. Reuses the same bounded-concurrency
+    /// fallback (`measure(_:addingTo:totalTargets:)`) via a scratch instance
+    /// rather than re-implementing phase 2's sliding window a second time.
+    public static func categories(in root: FileNode) async -> [PurgeCategory] {
+        var measured = PurgeCatalog.discover(in: root)
+        let definitions = PurgeCatalog.definitions()
+        var misses: [PurgeTargetDefinition] = []
+        for definition in definitions {
+            if let node = root.node(atPath: definition.path) {
+                measured.append(PurgeTarget(definition: definition, sizeBytes: node.size))
+            } else {
+                misses.append(definition)
+            }
+        }
+        guard !misses.isEmpty else { return PurgeCategory.grouped(measured) }
+
+        let totalTargets = measured.count + misses.count
+        let scratch = PurgeScanner()
+        measured = await scratch.measure(misses, addingTo: measured, totalTargets: totalTargets)
+        return PurgeCategory.grouped(measured)
+    }
+}

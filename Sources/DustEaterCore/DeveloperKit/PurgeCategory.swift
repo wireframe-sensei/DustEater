@@ -63,10 +63,11 @@ public struct PurgeCategory: Sendable, Identifiable, Equatable {
 extension PurgeCategory {
     /// Groups a flat list of measured targets into one `PurgeCategory` per
     /// `PurgeCategoryID` that has at least one match, each sorted largest
-    /// first. Shared by `PurgeScanner` (to build the final `.loaded` state)
-    /// and `DeveloperKitView` (to group the partial results shown mid-scan)
-    /// - both need the exact same grouping, so it lives here once rather
-    /// than as two copies drifting apart.
+    /// first. Shared by `PurgeScanner.measure` (progressive `@Observable`
+    /// state) and `PurgeScanner.categories` (the headless variant
+    /// `CleanupFindingsBuilder` reads from) - both need the exact same
+    /// grouping, so it lives here once rather than as two copies drifting
+    /// apart.
     public static func grouped(_ targets: [PurgeTarget]) -> [PurgeCategory] {
         PurgeCategoryID.allCases.compactMap { categoryID in
             let categoryTargets = targets.filter { $0.definition.categoryID == categoryID }
