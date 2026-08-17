@@ -425,25 +425,40 @@ oversights - don't "fix" these without the user asking:
     a different sensor key name or sensor hierarchy. All failures fall through
     to "Unavailable" gracefully. When revisit: only if/when Apple publishes
     an official temperature API.
-- **Duplicate & Large File Hunter (`Sources/DustEaterCore/Duplicates/`,
-  `Sources/DustEaterApp/Inspector/`):**
-  - **Runs entirely over an already-scanned `FileNode` tree - no second
-    directory walk, no second permission prompt.** Entry is
-    `MainContentView`'s "Find Duplicates" toolbar button, reachable only
-    from within `.scanFlow` once a scan has finished. There is no home-screen
-    card for this feature; it deliberately has exactly one entry point.
-  - **Timestamps and logical size come from on-demand `lstat`
-    (`FileStatReader`), not from `FileNode` itself.** `FileNode.size` is
-    on-disk *allocated* size, the wrong key for byte-accurate dedup (which
-    needs logical `st_size`), and `FileNode` is instantiated millions of
-    times per scan, so adding mtime/atime/birthtime there would be a real
-    per-node memory regression for data almost no node needs. Candidates are
-    pre-filtered by `FileNode.size` first (thousands of files after the
-    default 1 MB floor, not millions), and only those get an individual
-    `lstat`. Do not "optimize" this by extending `AttrListBulkReader` -
-    that parser reads packed attributes in strict ascending bit order
-    (`AttrListBulkReader.swift`), and inserting fields there is high-risk
-    for a benefit this module doesn't need.
+- **Duplicate & Large File Hunter, and Developer & Creative Power-User Clean
+  Up Kit - both retired as standalone screens by the Cleanup restructure
+  (see the section below).** `Sources/DustEaterApp/Inspector/` and most of
+  `Sources/DustEaterApp/DeveloperKit/` are deleted - `DuplicatesView`,
+  `DuplicateSetOverview`, `DuplicateSelectionState`, `SmartSelectMenu`,
+  `ThumbnailImageView`, `DeveloperKitView`, `TargetCardView`,
+  `PurgeConfirmationSheet`, `PurgeSelection`, and the `SmartSelector`/
+  `ImageFileDetector` Core types that only they used, are gone. Do not go
+  looking for them; do not "restore" them as a fix for a regression -
+  Smart Select and the per-set duplicate image grid are real, disclosed
+  capability removals (see `CHANGELOG.md`'s Unreleased section), not an
+  oversight.
+
+  The **Core** logic both screens were built on is still here, unchanged,
+  and now feeds `Sources/DustEaterCore/Cleanup/` instead:
+  `DuplicateDetector`, `LargeFileFinder`, `PurgeCatalog`, `PurgeCategory`,
+  `BundleProtection`, `DeveloperArtifactFolders`, `XcodeArchiveLister` (and
+  its one surviving app-layer view, `XcodeArchivesListView`, now opened
+  from the Xcode build artifacts finding's footer action instead of a
+  Developer Kit card). Everything below that's still true about *that*
+  code is kept; everything that was only true about the deleted screens
+  is not.
+
+  - **`FileNode.size` is on-disk *allocated* size, the wrong key for
+    byte-accurate dedup or a `>1 GB` threshold**, which need logical
+    `st_size`. `DuplicateDetector`/`LargeFileFinder` gather that via
+    on-demand `lstat` (`FileStatReader`) instead of adding fields to
+    `FileNode` itself, which is instantiated millions of times per scan.
+    Candidates are pre-filtered by `FileNode.size` first (thousands of
+    files after the default floor, not millions), and only those get an
+    individual `lstat`. Don't "optimize" this by extending
+    `AttrListBulkReader` - that parser reads packed attributes in strict
+    ascending bit order, and inserting fields there is high-risk for a
+    benefit this doesn't need.
   - **Candidate prefiltering uses a quarter of the real size floor against
     `FileNode`'s allocated size, then the real floor against logical size
     after `lstat`.** A heavily APFS-compressed file can have an allocated
@@ -481,14 +496,6 @@ oversights - don't "fix" these without the user asking:
     as visible as the API itself). An unknown last-used date is always kept
     in results, never treated as evidence of staleness - see
     `LargeFileFinder.matches`.
-  - **Every smart-selection rule (`SmartSelector`) and the UI's own
-    `DuplicateSelectionState` enforce the same invariant: at least one file
-    per duplicate set is always left unselected.** A `DuplicateSet` is
-    never smaller than 2 by construction, so "keep one, select the rest" is
-    always well-defined. `allInDownloads` is the rule that actually needs
-    this guard - when every copy in a set lives in Downloads, it keeps the
-    newest rather than selecting all of them. Do not add a rule that can
-    select every copy in a set.
   - **The hard-link collapse in `DuplicatePartitioner.collapsingHardLinks`
     keeps whichever alias `Dictionary(grouping:)` iterates first among
     files sharing a `(deviceID, inode)` pair - which one survives is
@@ -513,157 +520,35 @@ oversights - don't "fix" these without the user asking:
     that read one file and return, never needing to acquire a further
     permit from this same window to make progress, so there's no circular
     wait the way an unbounded *recursive* fan-out could create.
-  - **The confirmation sheet re-checks each file exists and is still
-    deletable immediately before acting on it** (`DuplicatesView.
-    performDelete`), rather than trusting the selection snapshot blindly.
-    There's a real window between analysis and confirmation where the
-    filesystem can change; this closes it for the cost of one
-    `fileExists`/`canDelete` check per file.
-  - **Deletion offers both Move to Trash and Delete Permanently**, matching
-    the existing single-item delete alert in `MainContentView` - unlike App
-    Manager's `UninstallConfirmationSheet`, which is trash-only. This was an
-    explicit choice (not an oversight) to keep the app's delete UI
-    consistent across features.
-  - **`DuplicatesView`'s `root` is a snapshot, not live-updated after a
-    delete made from within the inspector itself.** `ContentView.
-    handleInspectorDeleted` reconciles the *main* scan tree via
-    `removingNode` + `coordinator.updateTree` so the treemap and total
-    stay correct, but the inspector's own `root` stays as it was when the
-    screen opened. This is the same "detected, not reconciled live"
-    trade-off `FileSystemWatcher` already documents elsewhere in this
-    codebase. It's harmless in practice: re-analyzing against a stale root
-    just fails to `lstat` the now-missing paths, which drop out on their
-    own exactly like any file removed externally mid-scan.
-  - **`MixedStateCheckbox` takes a plain `NSControl.StateValue`, not
-    `AppUninstallSelection.SelectAllState`.** It was generalized when this
-    module needed the same tri-state checkbox for a completely different
-    selection type (`DuplicateSelectionState.SelectAllState`); both map
-    onto `NSControl.StateValue` via a small `nsControlState` extension
-    instead of coupling the shared component to either feature's selection
-    type.
-  - **No perceptual image hashing.** The brief asked for it as a Phase 2/
-    optional item; it's deferred entirely. Approximate matches can't be
-    safely auto-selected for deletion the way byte-identical matches can,
-    and would need a distinctly more cautious UI (no Smart Select, probably
-    a confidence indicator) rather than fitting into the existing
-    `DuplicateSet`/`SmartSelector` shape. Revisit as its own scoped feature
-    if wanted.
   - **Developer-tool directories (`node_modules`, `.git`, package-manager
-    caches, build output) are hidden from both lists by default**
-    (`DeveloperArtifactFolders.swift`), with a "Show Developer Tool
-    Folders" toggle in the Filters menu to reveal them instantly. This is a
-    different risk category from `BundleProtection`: deleting a file out
-    of a signed `.app` breaks a code signature, but deleting a duplicate
-    file out of a project-local `node_modules` breaks that specific
-    project's build until it's reinstalled - and unlike a global
-    package-manager cache (`~/.npm`, `~/Library/Caches/npm`), which
-    regenerates cleanly, neither `DuplicateDetector` nor `LargeFileFinder`
-    has any way to tell an active `node_modules` from an abandoned one.
-    The same package is also routinely installed byte-identically across a
-    dozen unrelated projects, making this the single biggest source of
-    noisy, low-value duplicate reports on a developer's Mac. The toggle
-    only changes what's *visible* for auditing total size - it doesn't
-    make anything safer to select for deletion, and the help text on the
-    toggle says so explicitly. App Manager's existing "Developer Tools"
-    detection (`DeveloperToolFolders.swift`) was evaluated and found not
-    reusable here: it's a fixed 24-name list matched only against top-level
-    folders directly under `~/Library/{Caches,Containers,...}`, and never
-    walks into project-local `node_modules` scattered across the disk -
-    entirely different scope from what this needed.
-  - **The exclusion filters at *display* time, not scan time - `DuplicatesView`
-    always calls Core with `includeDeveloperArtifacts: true`, and filters
-    `duplicateSets`/`largeFileEntries` (computed properties) based on the
-    toggle instead.** `DuplicateScanOptions.includeDeveloperArtifacts` /
-    `LargeFileFilter.includeDeveloperArtifacts` (Core) still support
-    skipping these directories entirely during the tree walk - never
-    stat'd or hashed - and stay covered by `DuplicateDetectorTests`/
-    `LargeFileFinderTests` for callers that want that (a future CLI tool,
-    for instance). The GUI deliberately doesn't use that mode: an earlier
-    version did, which meant flipping the toggle required a full re-scan
-    since the excluded files' sizes/hashes/dates had genuinely never been
-    gathered. Filtering at display time (`DeveloperArtifactFolders.
-    pathContainsDeveloperArtifact`, checking path components against the
-    same name list) makes the toggle instant, at the direct cost of every
-    scan always hashing `node_modules`/`.git` trees whether or not they end
-    up shown - a real tradeoff, decided in favor of toggle responsiveness
-    over default-scan speed. If that tradeoff ever needs revisiting (e.g.
-    scans feel slow on `node_modules`-heavy machines), switch
-    `runFullAnalysis`'s hardcoded `true` back to the toggle's value rather
-    than re-deriving this from scratch.
-  - **Deleting every copy of a duplicate file (including what would
-    otherwise be the protected "last copy") is possible, but deliberately
-    requires a separate, explicit action from the normal flow.**
-    `DuplicateSelectionState.toggle` (`DuplicateSelectionState.swift`) no
-    longer refuses to select the last unselected file in a set - the
-    checkbox on that file's `FileFactsCard` is warned (an orange "Last
-    Copy" badge, distinct help text) rather than disabled. A dedicated
-    "Include Original" button in `DuplicateSetOverview`, styled and labeled
-    distinctly from "Select All", does the same thing in one click, and
-    only appears while there's still a copy left to include. Two things
-    are unconditionally *not* touched by this:
-    - `SmartSelector`'s automated bulk rules (`SmartSelector.swift`, Core)
-      keep their hard "always keep one survivor" guarantee unconditionally,
-      still enforced by `noRuleEverSelectsEveryFileInASet` and friends -
-      Smart Select applies across potentially dozens of sets at once with
-      far less per-file visibility than the overview gives, so that's the
-      one place a full wipe must never be reachable.
-    - `DuplicateCleanConfirmationSheet` detects when a delete would leave
-      zero copies of a file (`DuplicatesView.fullyDeletedFileNames`) and
-      shows an explicit "No Copies Will Remain" warning banner, distinct
-      from the routine "delete N duplicate files" framing - this is a
-      meaningfully more consequential outcome (the file is gone, not just
-      decluttered) and the confirmation step says so before it happens.
-  - **Image duplicate sets render as a grid of `DuplicateImageCard` tiles
-    (`DuplicateSetOverview.swift`) - thumbnail, checkbox overlaid top-left,
-    details below - one card per copy, not one shared preview.** This
-    superseded an earlier version of the design that showed a single
-    "hero" thumbnail once above a text-first row list, reasoning that since
-    every copy is byte-identical there was nothing to gain from repeating
-    the same picture per row. That reasoning about *comparison* was correct
-    but solved the wrong problem: each row still needs to be an
-    independently clickable, recognizable selection target (matching
-    Photos.app's own duplicate-review grid - photo tile + selection badge,
-    not a filename you have to read), and a single shared hero doesn't
-    provide that. The picture repeating across cards is therefore
-    intentional, not a regression to "fix" back into one preview - it is
-    not there for visual comparison (every card shows the identical
-    bytes), it's what makes each tile self-sufficient as a click target.
-    Non-image duplicate sets keep the original `FileFactsCard` stacked-row
-    layout (`DuplicateSetOverview.isImageSet` branches between the two) -
-    the card grid only makes sense once there's real image content to
-    show.
-    `ThumbnailImageView.swift` wraps `QLThumbnailGenerator`
-    (`QuickLookThumbnailing`, auto-links with no `Package.swift` change,
-    same as `QuickLookUI`) behind an actor-based cache (`ThumbnailCache`)
-    that de-duplicates concurrent requests for the same path/size - this is
-    what makes rendering the same picture across several cards cheap rather
-    than re-generating it per card. `FileFactsCard`'s smaller inline
-    thumbnail (40pt, shared with the large-files detail panel) is unrelated
-    to this and unchanged. `ImageFileDetector.isImage(atPath:)` (Core,
-    `UniformTypeIdentifiers`, also auto-links) decides per-file whether to
-    attempt a thumbnail at all; non-image files keep the plain `NSWorkspace`
-    Finder icon, which is also `ThumbnailImageView`'s loading state and its
-    failure fallback - there is no separate spinner. `DuplicateImageCard`'s
-    selection badge is a hand-built `ZStack` (translucent circle backing +
-    SF Symbol), not SF Symbols' `.palette` rendering mode - `circle` (the
-    unselected symbol) is single-layer, so palette mode has no second layer
-    to carry the dark backing color, which would silently vanish over a
-    bright photo. Don't "simplify" it back to `.palette` without checking
-    that both `circle` and `checkmark.circle.fill` actually have matching
-    layer counts.
+    caches, build output) are excluded from duplicate/large-file candidates
+    by default** (`DeveloperArtifactFolders.swift`,
+    `DuplicateScanOptions.includeDeveloperArtifacts` /
+    `LargeFileFilter.includeDeveloperArtifacts`, both still default
+    `false`). Different risk category from `BundleProtection`: deleting a
+    file out of a signed `.app` breaks a code signature, but deleting a
+    duplicate out of a project-local `node_modules` breaks that project's
+    build until it's reinstalled - and neither `DuplicateDetector` nor
+    `LargeFileFinder` has any way to tell an active `node_modules` from an
+    abandoned one. The same package is also routinely installed
+    byte-identically across a dozen unrelated projects, making this the
+    single biggest source of noisy, low-value duplicate reports on a
+    developer's Mac. `CleanupFindingsBuilder` relies on this default
+    staying `false` - it never overrides it.
 - **Developer & Creative Power-User Clean Up Kit
-  (`Sources/DustEaterCore/DeveloperKit/`, `Sources/DustEaterApp/DeveloperKit/`):**
+  (`Sources/DustEaterCore/DeveloperKit/`, now Core-only - the App-layer
+  purge UI it fed is gone, see above):**
   - **`PurgeSafetyLevel` has four cases, not the three originally briefed** -
     `.safe`, `.rebuildable`, `.caution`, and `.reportOnly`. The fourth exists
     so "a Docker card with a delete button" is unrepresentable in the type,
     not merely discouraged in the view: Docker's `Docker.raw`, mounted
     Simulator runtime volumes, and Final Cut Pro/Logic Pro library contents
     genuinely have no safe deletion path from outside their owning app, so
-    they're sized and explained but never offered a toggle at all -
-    `TargetCardView`'s `footer` branches on `.reportOnly` to render Reveal
-    in Finder plus a hint instead of a `Toggle`, and `PurgeSelection.toggle`
-    refuses `.reportOnly` a second time at the data layer as a hard backstop
-    independent of what the view happens to render.
+    they're sized and explained but never offered a delete action at all -
+    `CleanupItem.isReportOnly`/`hint` (Cleanup's own type, not
+    `PurgeTargetDefinition` directly) carries this forward, and
+    `SelectionStore.toggle` refuses a `.reportOnly` item a second time at
+    the data layer as a hard backstop independent of what the view renders.
   - **iOS Simulator runtimes are report-only, and this isn't a conservative
     default - they're not deletable at all through this app.** Verified
     directly (not assumed): downloaded runtimes are a single root-owned DMG
@@ -696,9 +581,8 @@ oversights - don't "fix" these without the user asking:
     folder names (`Render Files`, `Transcoded Media`, `Freeze Files`, `Undo
     Data`) are unverified** - neither app is installed on the machine this
     was built on. `PurgeCatalog.fcpBundleTarget`/`.logicxBundleTarget` sum
-    those specific subfolder names if present and report zero (rendering no
-    card at all, per `DeveloperKitView`'s zero-byte filter) if the guessed
-    names don't match a real installation - a wrong guess costs a missing
+    those specific subfolder names if present and report zero if the
+    guessed names don't match a real installation - a wrong guess costs a missing
     number, never an attempted deletion, since these are report-only
     regardless. Deleting Final Cut render files from outside the app is
     *roughly* what its own "Delete Generated Library Files" does, but
@@ -717,20 +601,6 @@ oversights - don't "fix" these without the user asking:
     already covered. This was shipped as its own standalone commit ahead of
     the rest of the module, since it's a real fix independent of everything
     else here.
-  - **Trash-vs-Permanent button prominence is inverted from
-    `DuplicateCleanConfirmationSheet`, on purpose.** There, Move to Trash is
-    the prominent default. Here, `PurgeConfirmationSheet.actionButtons`
-    makes Delete Permanently prominent whenever the selection is only
-    `.safe`/`.rebuildable`, and only swaps to Trash-prominent once a
-    `.caution` target is included. Reasoning: moving 40 GB of DerivedData to
-    the Trash frees zero bytes until the Trash is emptied, and the Trash
-    sits on the *same volume* - the entire point of this screen is freeing
-    space *now*, and every `.safe`/`.rebuildable` target is regenerable by
-    definition, so the safety net Trash provides is worth less here than the
-    friction it costs. A `.caution` target has no such regeneration
-    guarantee, so it gets the same Trash-first treatment as every other
-    destructive action in the app. Both buttons always exist regardless;
-    only which one is `.borderedProminent` changes.
   - **`SafetyBadge` draws a literal `Capsule()`, not
     `metrics.buttonShape`.** `ControlMetrics.isCapsule` (`MacOSDesignTokens.swift`)
     governs controls that draw themselves as compact buttons - at
@@ -755,15 +625,14 @@ oversights - don't "fix" these without the user asking:
     concurrently would be ten unbounded fan-outs at once, which is why the
     cap is a real 4, not a cosmetic one.
   - **`PurgeCategory.grouped(_:)` lives in Core and is `public`, used by both
-    `PurgeScanner` (building the final `.loaded` state) and
-    `DeveloperKitView` (grouping the partial `measured` array shown mid-scan
-    for streaming cards) - this is the one grouping helper in the module
-    that *was* promoted, deliberately, unlike `withConcurrentTasks` above.**
-    The difference: this one has two real call sites that need the *exact*
-    same grouping today, not a hypothetical third, and duplicating six lines
-    of `filter`/`sort` across a Core service and a SwiftUI view is the kind
-    of drift Rule of Three is meant to prevent once there's already a second
-    real caller, not just a first.
+    `PurgeScanner.measure` (progressive `@Observable` state) and
+    `PurgeScanner.categories` (the headless variant `CleanupFindingsBuilder`
+    reads from) - this is the one grouping helper in the module that *was*
+    promoted, deliberately, unlike `withConcurrentTasks` above.** The
+    difference: this one has two real call sites that need the *exact* same
+    grouping, not a hypothetical third, and duplicating six lines of
+    `filter`/`sort` is the kind of drift Rule of Three is meant to prevent
+    once there's already a second real caller, not just a first.
   - **Xcode Archives never becomes a bulk-selectable `PurgeTarget`, on
     purpose - it's the one category with its own dedicated drill-in list**
     (`XcodeArchiveLister`, `XcodeArchivesListView`). An `.xcarchive` holds
@@ -772,10 +641,10 @@ oversights - don't "fix" these without the user asking:
     different UUID, not a replacement for the one that's gone. A `.caution`
     badge on a single bulk toggle was judged insufficient friction for a
     one-click, irreversible action with zero regeneration path - so instead
-    the Xcode category surfaces an `ArchivesSummaryCardView` with a "Browse
-    Archives" button (not a toggle) that opens a per-archive list, and
-    deletion happens one archive at a time through the same Trash/Permanent
-    alert pattern `MainContentView` already uses for a single selected item.
+    the Xcode build artifacts finding's footer opens `XcodeArchivesListView`
+    directly (see the Cleanup restructure section below), and deletion
+    happens one archive at a time through the same Trash/Permanent alert
+    pattern every other single-item delete in the app uses.
     `XcodeArchiveLister.listArchives` reads structure and size entirely from
     the already-scanned tree (`root.node(atPath:)` on the Archives folder,
     two levels of children) and returns empty rather than falling back to a
@@ -798,7 +667,7 @@ oversights - don't "fix" these without the user asking:
     data that sits one directory away from the Premiere preview caches this
     module *does* discover and delete, and was judged the single likeliest
     way this module could destroy real work if left unguarded). Checked
-    independently in both `DeveloperKitView.performPurge` and
+    independently in both `CleanupCommitter.commit` and
     `XcodeArchivesListView.delete` - defense in depth, not trusted to a
     single call site.
   - **`FileOperations.clearSystemCaches()` was removed, not fixed in
@@ -806,9 +675,112 @@ oversights - don't "fix" these without the user asking:
     *and* `~/Library/Application Support` - the latter is real application
     data (login state, licenses, local databases), not a cache - bypassed
     `canDelete`, deleted permanently with zero confirmation, and swallowed
-    every per-item failure with a bare `continue`. Its only caller was the
-    Tools menu's "Clear Cache" item in `MainContentView`'s toolbar, which
-    this module's toolbar entry point replaced outright; the Tools menu
-    itself was removed too since that item was its only content. See
-    `CHANGELOG.md`'s Unreleased section for the user-facing note - this is a
-    real behavior removal, not an invisible refactor.
+    every per-item failure with a bare `continue`. Its only caller was a
+    Tools-menu toolbar item, removed along with the menu itself in the same
+    change that introduced this module. See `CHANGELOG.md`'s Unreleased
+    section for the user-facing note - this is a real behavior removal, not
+    an invisible refactor.
+- **Cleanup restructure (`Sources/DustEaterCore/Cleanup/`,
+  `Sources/DustEaterApp/Cleanup/`, `CleanupShellView.swift`)** - implements
+  items 1-4 of `docs/design_handoff_cleanup_restructure/README.md`: a
+  ranked Cleanup screen as the post-scan default, app-wide selection with a
+  Review screen, Trash-by-default with a real undo, and a Receipt with
+  before/after free space. Items 5-8 (streaming partials, browse-by-type in
+  Explore, permission onboarding, menu bar monitoring) are not built.
+  - **Exactly six findings ship - package manager caches, applications
+    unopened over a year, downloads older than 12 months, Xcode build
+    artifacts, duplicate files, iOS Simulator runtimes - not every
+    `PurgeCatalog` category.** Docker, Adobe, project-local artifacts
+    (`node_modules`/Cargo/SPM/CocoaPods), and Final Cut/Logic stay in
+    `PurgeCatalog` as Core data (still measured by `PurgeScanner`, still
+    tested) but are never turned into a `CleanupFinding` - there is no UI
+    path to them at all right now. This was an explicit scope call, not an
+    oversight: revisit by adding more `CleanupFindingsBuilder` functions
+    and `CleanupFindingID` cases, not by resurrecting Developer Kit.
+  - **`CleanupItem.isUserContent` is always `false` for all six findings,
+    on purpose.** The design's safety rule 3 ("permanent deletion withheld
+    for the user's own files") reads literally in the handoff as applying
+    only to Explore's browse-by-type content (item 6, not built), not to
+    Downloads or duplicate files - so Review offers both Trash and
+    Permanent for everything today, exactly like the old
+    `DuplicatesView`/`DeveloperKitView` did. The flag and Review's
+    branch on it are real and wired, just dormant until Explore sets it.
+  - **`CleanupFindingsBuilder.unusedApplications` treats an unknown
+    `lastOpenedDate` as stale (included), the opposite convention from
+    `LargeFileFinder.matches`'s "unknown is never evidence of staleness."**
+    Deliberate, not a copy-paste mismatch - the two are answering different
+    questions. `LargeFileFinder` decides whether a *file's size* is worth
+    surfacing at all, where wrongly hiding a huge file because Spotlight
+    has no metadata for it is the worse failure. This finding decides
+    whether *removing an entire app* looks abandoned, where "no signal
+    macOS has ever seen this app opened" is itself the stronger evidence.
+  - **The duplicate-files finding exposes only the non-newest copies as
+    deletable, permanently - there is no "Include Original" override the
+    way `DuplicateSetOverview` used to have.** `CleanupItem.deletablePaths`
+    for a duplicate item is fixed at construction (`DuplicateSet.files`
+    minus its newest member) and nothing in `SelectionStore`/`ReviewView`
+    can select the survivor. A real, disclosed capability reduction (see
+    `CHANGELOG.md`), traded for a much simpler item shape - no per-set
+    "which copy is locked" state to track outside the `DuplicateSet` itself.
+  - **Review's Trash/Permanent choice has no safety-aware prominence flip -
+    Trash is always the recommended, `.borderedProminent` option**, unlike
+    the old `PurgeConfirmationSheet`, which promoted Permanent by default
+    and only favored Trash once a `.caution` target was selected. This
+    follows the design handoff's safety rules directly ("Trash is the
+    default destination... always") rather than the old screen's
+    reclaim-now-over-safety-net reasoning, which was specific to a
+    dev-cache-only selection Cleanup no longer guarantees.
+  - **Undo (`CleanupShellView.performUndo`) puts the files back and
+    triggers a full rescan; it does not restore the previous selection**,
+    despite the design handoff saying Undo restores both. Carrying
+    `CleanupItem` references across a rescan (whose ids may not even still
+    match, if content changed) isn't worth the complexity for an undo path.
+  - **`FileOperations.delete`/`deleteAppBundle` now return
+    `@discardableResult ... URL?`** (previously `Void`) - the trashed
+    item's real location, captured from `FileManager.trashItem`'s
+    `resultingItemURL` rather than discarded. This is what makes
+    `FileOperations.putBack(from:to:)` / Receipt's "Undo - Put Back"
+    possible at all; every existing call site kept compiling unchanged
+    because of `@discardableResult`.
+  - **`CleanupCommitter.commit` is one shared batch-delete function**,
+    replacing the three near-identical per-path delete loops that used to
+    live in `DeveloperKitView.performPurge`, `DuplicatesView.performDelete`,
+    and `AppDetailInspector.proceedWithUninstall`. The first two callers no
+    longer exist; `AppDetailInspector` still has its own inline loop
+    (unchanged - App Manager wasn't touched by this restructure) and was
+    deliberately *not* migrated onto `CleanupCommitter`, since doing so
+    wasn't asked for and App Manager's uninstall has its own
+    running-app-termination flow this function doesn't replicate.
+  - **The Apps destination inside `CleanupShellView` embeds `AppManagerView`
+    unmodified, nesting its own `NavigationSplitView` inside the outer
+    shell's detail pane** rather than flattening App Manager's
+    mode-picker-plus-list sidebar into the shell's own sidebar. This reads
+    roughly like Mail.app's three-pane layout in practice. `AppManagerView`
+    was intentionally left untouched (row checkboxes and an uninstall
+    breakdown panel are the design's item 5, not built), so its "Home"
+    toolbar button still means exactly what its label says - back to
+    `DiskHomeView` - not back to Cleanup. Repurposing that button to mean
+    "back to Cleanup" without changing its label/icon would have been a
+    real, if small, honesty bug.
+  - **The persistent three-item sidebar (disk context block, Cleanup/
+    Explore/Apps nav, contextual section, footer) is built from ordinary
+    `NavigationSplitView` + native controls, not the design handoff's exact
+    custom window chrome** (rounded window corners/shadows, the literal
+    246pt/28pt/etc pixel grid, a custom stoplight-adjacent sidebar). That
+    level of chrome fidelity belongs to the window-shell work implied by
+    items 5-8, which are out of scope here; this restructure applies the
+    handoff's colors/type/spacing to the screens actually in scope
+    (Cleanup, Review, Receipt) while keeping the app's existing, working
+    native-chrome pattern for navigation itself.
+  - **The disk-picker auto-skip (`ContentView.onlyEligibleVolumePath`) was
+    verified to correctly trigger a scan of the sole eligible volume, but
+    the resulting full-disk scan itself was not verified to complete** -
+    observed stalled (0% CPU, no progress) scanning `/` on the machine this
+    was built on, inside `/System/Volumes/...` (firmlink territory
+    `DiskScanner.swift` predates and wasn't touched here). Before this
+    change, a user had to explicitly click a disk in `DiskHomeView` to
+    trigger the identical scan, so this isn't a new code path - only a new
+    *automatic* trigger for whatever `DiskScanner` already does with
+    firmlinks. If full-disk scans hang in practice, revisit whether
+    auto-skip should apply to `/` specifically, not just whether exactly
+    one volume exists.

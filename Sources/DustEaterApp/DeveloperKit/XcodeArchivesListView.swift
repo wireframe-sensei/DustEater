@@ -2,65 +2,15 @@ import SwiftUI
 import AppKit
 import DustEaterCore
 
-/// The Xcode category's entry point into the Archives drill-in list. Not a
-/// `TargetCardView`: Archives never becomes a `PurgeTarget` at all (see
-/// `PurgeCatalog.definitions`'s doc comment) since "select the whole
-/// Archives folder" isn't a safe action - deleting one specific archive is,
-/// and that only happens one row at a time inside `XcodeArchivesListView`.
-struct ArchivesSummaryCardView: View {
-    let archiveCount: Int
-    let totalBytes: Int64
-    let onBrowse: () -> Void
-
-    @Environment(\.controlMetrics) private var metrics
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Archives")
-                    .font(.control)
-                    .foregroundStyle(.primary)
-                Spacer()
-                SafetyBadge(level: .caution)
-            }
-
-            Text(ByteFormatter.string(fromBytes: totalBytes))
-                .font(.system(.title3, design: .monospaced).weight(.semibold))
-                .foregroundStyle(.primary)
-
-            Text("\(archiveCount) archive\(archiveCount == 1 ? "" : "s") - each holds the dSYM needed to symbolicate crashes from that build. Deleting one is permanent; rebuilding doesn't replace it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
-
-            Spacer(minLength: 0)
-
-            HStack {
-                Spacer()
-                Button(action: onBrowse) {
-                    Label("Browse Archives", systemImage: "list.bullet")
-                }
-                .font(.control)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: 150)
-        .padding(16)
-        .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
-    }
-}
-
 /// Per-archive drill-in list: browse, Reveal in Finder, and delete one
 /// specific archive at a time - the only shape a delete action for Archives
 /// takes at all, per `PurgeCatalog.definitions`'s doc comment on why Archives
-/// never becomes a bulk-selectable `PurgeTarget`.
+/// never becomes a bulk-selectable `PurgeTarget`. Opened from the Xcode
+/// build artifacts finding's footer action in `CleanupShellView`.
 struct XcodeArchivesListView: View {
     @Binding var archives: [XcodeArchive]
-    /// Reports the deleted archive's path back up so `DeveloperKitView` can
-    /// forward it through the same `onDeleted` contract `DuplicatesView`
-    /// uses to reconcile the live scan tree.
+    /// Reports the deleted archive's path back up so the caller can
+    /// reconcile it out of the live scan tree and the Cleanup findings.
     let onDeleted: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -146,7 +96,7 @@ struct XcodeArchivesListView: View {
     }
 
     private func delete(_ archive: XcodeArchive, permanently: Bool) {
-        // TOCTOU guard, same reasoning as `DeveloperKitView.performPurge`.
+        // TOCTOU guard, same reasoning as `CleanupCommitter.commit`.
         guard FileManager.default.fileExists(atPath: archive.path) else {
             archives.removeAll { $0.path == archive.path }
             return

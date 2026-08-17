@@ -24,13 +24,9 @@ import Foundation
 ///   hashed. Still available for callers that want faster scans by never
 ///   examining these directories at all (e.g. a future CLI tool).
 /// - `pathContainsDeveloperArtifact(_:)` checks a full *path* for any
-///   matching component, used by `DustEaterApp`'s `DuplicatesView` to
-///   filter already-scanned results for display. The app always scans with
-///   `includeDeveloperArtifacts: true` and filters what's shown instead -
-///   a deliberate choice (over skipping at scan time) so the "Show
-///   Developer Tool Folders" toggle is instant, at the cost of every scan
-///   paying to hash `node_modules`/`.git` trees whether or not they end up
-///   visible. See `DuplicatesView.duplicateSets` / `.largeFileEntries`.
+///   matching component - for a caller that scans with
+///   `includeDeveloperArtifacts: true` and wants to filter or label results
+///   after the fact rather than skip them at scan time.
 public enum DeveloperArtifactFolders {
     private static let names: Set<String> = [
         // Dependency / install trees

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Cleanup**: The app now restructures around a scan -> ranked findings ->
+  review -> receipt flow, replacing the old five-way sidebar (Disks &
+  Folders, Overview, Duplicates & Large Files, Developer Kit, App Manager)
+  with three destinations - Cleanup, Explore, Apps
+  - Post-scan lands on a ranked Cleanup screen: six findings (package
+    manager caches, applications unopened over a year, downloads older
+    than 12 months, Xcode build artifacts, duplicate files, iOS Simulator
+    runtimes), largest first, nothing pre-selected
+  - App-wide selection spans every finding into one Review screen and a
+    persistent selection tray showing the running total
+  - Trash is the default destination everywhere, always; permanent
+    deletion is a separate, explicitly worded opt-in
+  - A real Undo - Put Back on the Receipt screen, backed by the Trash
+    item's actual restore location (previously discarded)
+  - The disk picker is skipped automatically when only one volume is
+    eligible to scan
 - **Developer & Creative Power-User Clean Up Kit**: New feature to find and
   safely reclaim developer and creative-app caches and build artifacts
   - Catalog of known Xcode, package-manager, Docker, and Adobe cache
@@ -24,6 +40,14 @@ All notable changes to this project will be documented in this file.
     or permanent deletion
 
 ### Removed
+- **Duplicates & Large Files inspector and the Developer Kit screen**: both
+  retired as standalone destinations now that Cleanup surfaces their data
+  directly. This is a real capability reduction, not just a relocation -
+  Smart Select's bulk duplicate-selection rules, the per-set duplicate
+  image thumbnail grid, the large-files browser, and Developer Kit's
+  Docker/Adobe/project-artifact/Final Cut/Logic category cards are gone.
+  Xcode Archives' per-archive drill-in list survives, now opened from the
+  Xcode build artifacts finding's footer action.
 - **System Cache Clearing** (Tools > Clear Cache): removed in favor of the
   Developer Kit above. The old implementation deleted every direct child of
   both `~/Library/Caches` *and* `~/Library/Application Support` - the
