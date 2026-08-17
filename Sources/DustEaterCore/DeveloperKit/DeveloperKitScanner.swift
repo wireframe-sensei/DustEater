@@ -198,28 +198,27 @@ public final class PurgeScanner {
 }
 
 extension PurgeScanner {
-    /// Headless variant of `measure(in:)` for a caller that only wants the
-    /// final `[PurgeCategory]`, with no `@Observable` progress to watch -
-    /// `CleanupScanner`, composing this alongside several other sources,
-    /// being the only current caller. Reuses the same bounded-concurrency
-    /// fallback (`measure(_:addingTo:totalTargets:)`) via a scratch instance
-    /// rather than re-implementing phase 2's sliding window a second time.
-    public static func categories(in root: FileNode) async -> [PurgeCategory] {
-        var measured = PurgeCatalog.discover(in: root)
+    /// Measures every *fixed* catalog path independently, with no
+    /// dependency on a scanned tree at all - safe to run concurrently with
+    /// the main disk scan itself (`ScanCoordinator`'s streaming findings
+    /// use exactly this). Skips the "is this path already in the tree"
+    /// zero-IO optimization `measure(in:)` uses, since there is no tree yet
+    /// to check - every definition goes through the same bounded-
+    /// concurrency fallback scan (`measure(_:addingTo:totalTargets:)`, via
+    /// a scratch instance) unconditionally.
+    public static func fixedPathCategories() async -> [PurgeCategory] {
         let definitions = PurgeCatalog.definitions()
-        var misses: [PurgeTargetDefinition] = []
-        for definition in definitions {
-            if let node = root.node(atPath: definition.path) {
-                measured.append(PurgeTarget(definition: definition, sizeBytes: node.size))
-            } else {
-                misses.append(definition)
-            }
-        }
-        guard !misses.isEmpty else { return PurgeCategory.grouped(measured) }
-
-        let totalTargets = measured.count + misses.count
         let scratch = PurgeScanner()
-        measured = await scratch.measure(misses, addingTo: measured, totalTargets: totalTargets)
+        let measured = await scratch.measure(definitions, addingTo: [], totalTargets: definitions.count)
         return PurgeCategory.grouped(measured)
+    }
+
+    /// Project-local targets discovered by walking an already-scanned tree
+    /// (`node_modules`, Cargo `target`, etc.) - the one piece of the
+    /// catalog `fixedPathCategories()` can't measure without a tree. Meant
+    /// to run once the tree scan finishes, joining what
+    /// `fixedPathCategories()` already found rather than replacing it.
+    public static func projectLocalCategories(in root: FileNode) -> [PurgeCategory] {
+        PurgeCategory.grouped(PurgeCatalog.discover(in: root))
     }
 }

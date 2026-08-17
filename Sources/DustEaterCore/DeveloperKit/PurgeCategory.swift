@@ -64,10 +64,10 @@ extension PurgeCategory {
     /// Groups a flat list of measured targets into one `PurgeCategory` per
     /// `PurgeCategoryID` that has at least one match, each sorted largest
     /// first. Shared by `PurgeScanner.measure` (progressive `@Observable`
-    /// state) and `PurgeScanner.categories` (the headless variant
-    /// `CleanupFindingsBuilder` reads from) - both need the exact same
-    /// grouping, so it lives here once rather than as two copies drifting
-    /// apart.
+    /// state) and the headless `PurgeScanner.fixedPathCategories`/
+    /// `.projectLocalCategories` `ScanCoordinator` streams findings from -
+    /// all need the exact same grouping, so it lives here once rather than
+    /// as separate copies drifting apart.
     public static func grouped(_ targets: [PurgeTarget]) -> [PurgeCategory] {
         PurgeCategoryID.allCases.compactMap { categoryID in
             let categoryTargets = targets.filter { $0.definition.categoryID == categoryID }
