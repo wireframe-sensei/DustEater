@@ -64,21 +64,51 @@ public struct FileOperations {
         !isSystemProtected(path: path)
     }
 
-    public static func delete(at path: String, permanently: Bool = false) throws {
+    /// Returns the item's new location in the Trash, or `nil` for a
+    /// permanent delete - the handle a caller needs to offer "Put Back"
+    /// later. `@discardableResult` so every existing call site that only
+    /// cared about the throw keeps compiling unchanged.
+    @discardableResult
+    public static func delete(at path: String, permanently: Bool = false) throws -> URL? {
         guard canDelete(at: path) else {
             throw FileOperationError.systemProtected
         }
 
         if permanently {
             try FileManager.default.removeItem(atPath: path)
+            return nil
         } else {
-            try moveToTrash(at: path)
+            return try moveToTrash(at: path)
         }
     }
 
-    private static func moveToTrash(at path: String) throws {
+    @discardableResult
+    private static func moveToTrash(at path: String) throws -> URL {
         let url = URL(fileURLWithPath: path)
-        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        var trashedURL: NSURL?
+        try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
+        // `trashItem` always populates `resultingItemURL` on success - this
+        // guard exists only because the API's type is an optional pointer,
+        // not because a nil result is an expected outcome.
+        guard let trashedURL = trashedURL as URL? else {
+            throw FileOperationError.deletionFailed("Trashed the item but couldn't determine its new location.")
+        }
+        return trashedURL
+    }
+
+    /// Moves an item back from the Trash to its original location - the
+    /// "Put Back" half of `delete(at:permanently: false)`. Refuses to
+    /// clobber something already sitting at `originalPath` (e.g. the user
+    /// recreated a file with the same name after trashing the old one) and
+    /// recreates any intermediate directories the original delete removed.
+    public static func putBack(from trashedURL: URL, to originalPath: String) throws {
+        guard !FileManager.default.fileExists(atPath: originalPath) else {
+            throw FileOperationError.deletionFailed("Something already exists at \(originalPath).")
+        }
+
+        let parent = (originalPath as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: trashedURL, to: URL(fileURLWithPath: originalPath))
     }
 
     /// True only for a direct child of `/Applications` or `~/Applications`
@@ -97,15 +127,17 @@ public struct FileOperations {
         return allowedParents.contains(parent)
     }
 
-    public static func deleteAppBundle(at path: String, permanently: Bool = false) throws {
+    @discardableResult
+    public static func deleteAppBundle(at path: String, permanently: Bool = false) throws -> URL? {
         guard canDeleteAppBundle(at: path) else {
             throw FileOperationError.systemProtected
         }
 
         if permanently {
             try FileManager.default.removeItem(atPath: path)
+            return nil
         } else {
-            try moveToTrash(at: path)
+            return try moveToTrash(at: path)
         }
     }
 
