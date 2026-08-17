@@ -773,14 +773,124 @@ oversights - don't "fix" these without the user asking:
     (Cleanup, Review, Receipt) while keeping the app's existing, working
     native-chrome pattern for navigation itself.
   - **The disk-picker auto-skip (`ContentView.onlyEligibleVolumePath`) was
-    verified to correctly trigger a scan of the sole eligible volume, but
-    the resulting full-disk scan itself was not verified to complete** -
-    observed stalled (0% CPU, no progress) scanning `/` on the machine this
-    was built on, inside `/System/Volumes/...` (firmlink territory
-    `DiskScanner.swift` predates and wasn't touched here). Before this
-    change, a user had to explicitly click a disk in `DiskHomeView` to
-    trigger the identical scan, so this isn't a new code path - only a new
-    *automatic* trigger for whatever `DiskScanner` already does with
-    firmlinks. If full-disk scans hang in practice, revisit whether
-    auto-skip should apply to `/` specifically, not just whether exactly
-    one volume exists.
+    verified to correctly trigger a scan of the sole eligible volume.** A
+    first attempt at verifying the resulting full-disk scan appeared to
+    stall (0% CPU, no progress) inside `/System/Volumes/...` (firmlink
+    territory `DiskScanner.swift` predates and wasn't touched here); a
+    later session's live test of the same `/` scan (see the Cleanup
+    streaming section below) showed real, if slow, progress instead - 10M+
+    items scanned, non-zero CPU throughout - so the first result likely
+    reflected transient conditions on that run rather than a genuine
+    `DiskScanner` deadlock. Not conclusively resolved either way; if
+    full-disk scans hang in practice, revisit whether auto-skip should
+    apply to `/` specifically, not just whether exactly one volume exists.
+- **Streaming Cleanup scan (item 5 of the design handoff) -
+  `Sources/DustEaterCore/ScanState.swift`, `ScanCoordinator.swift`,
+  `Sources/DustEaterApp/Cleanup/ScanningCardView.swift`:** findings now
+  stream in during the scan itself, not just after it finishes. Items 6-8
+  (browse-by-type, permission onboarding, menu bar monitoring) are not
+  built.
+  - **`CleanupScanner.swift` (the separate `@Observable` class that used to
+    drive the post-scan findings pass) is deleted - `ScanCoordinator` now
+    owns that work directly.** Findings need to be visible in two places at
+    once (the Scanning stage and the Cleanup screen) on two different,
+    overlapping timelines (during the tree scan and after it), which a
+    second, separate `@Observable` object gated behind `.finished` couldn't
+    represent without the shell reconciling two feeds. `ScanCoordinator.
+    findings`/`.inFlightFindingIDs` are the one live source both screens
+    read from.
+  - **Most findings don't need the assembled tree at all, and now run as
+    independent scans concurrent with the main tree walk, not gated behind
+    it.** Package manager caches / Xcode's fixed cache paths / simulator
+    runtimes (`PurgeScanner.fixedPathCategories`, a new headless variant
+    that skips `measure(in:)`'s "is this path already in the tree" check
+    entirely, since there is no tree yet), unused applications
+    (`AppManagerScanner.scanInstalledApps`), and old downloads (a direct
+    `DiskScanner` scan of `~/Downloads`, not `root.node(atPath:)`) each
+    start the moment `startScan` is called, as genuinely independent
+    top-level `Task`s - not children of the main scan's `Task`, so
+    `scanTask?.cancel()` alone doesn't stop them; `ScanCoordinator` tracks
+    them separately (`fastPathTasks`) and cancels both. Only project-local
+    purge targets (`PurgeCatalog.discover`, walking the tree for
+    `node_modules` etc.) and duplicate files (`DuplicateDetector`) actually
+    need the finished tree, and run after `.finished` fires - never
+    blocking Explore on duplicate hashing, which is by far the slowest
+    piece.
+  - **Package manager caches and Xcode build artifacts are measured twice,
+    on purpose - once fast-path (fixed catalog paths only), once more
+    after the tree finishes (project-local discovery only) - and
+    `inFlightFindingIDs` stays inclusive of both until the second pass
+    completes.** `ScanCoordinator.mergeFinding` unions items by id rather
+    than replacing, so the second pass only ever adds to what the first
+    already published - the sidebar total and the Scanning card's "Found
+    so far" figure are structurally monotonic (never decrease) as a
+    consequence of this, not because of a separate guard checking for it.
+  - **`ScanState` gained a `.cancelled` case, distinct from both `.idle`
+    and `.finished`.** Cancelling before the tree finishes can't produce
+    `.finished` (there's no complete, trustworthy `FileNode` to hand over -
+    `DiskScanner`'s own cancellation path returns real data for
+    already-completed subtrees but empty stubs for interrupted ones, which
+    would misrepresent an untrustworthy partial tree as a real one), and
+    can't fall back to `.idle` either, since `.idle` means "nothing has
+    happened yet" and would imply findings should reset - they must not
+    (see the design handoff's "cancelling keeps whatever was already
+    found"). Cancelling *after* `.finished` (cutting short only the
+    tree-dependent finding work) deliberately does **not** produce
+    `.cancelled` - the tree itself is legitimately complete by then, so
+    `cancelScan()` leaves `state` as `.finished` and only clears
+    `inFlightFindingIDs`.
+  - **`CleanupShellView` is mounted the moment a scan starts, not once it
+    finishes** - `ContentView`'s top-level switch now routes `.scanning`,
+    `.finished`, and `.cancelled` to the same `CleanupShellView` branch, so
+    its `@State` (selection, expanded findings, `cleanupStage`) persists
+    naturally across the whole lifecycle instead of being torn down and
+    rebuilt at `.finished`. `CleanupShellView.root: FileNode` (a required
+    `let`) is gone; `finishedRoot: FileNode?` is computed from
+    `coordinator.state` instead, `nil` throughout `.scanning` and after a
+    pre-finish cancel. Explore's nav row is disabled while
+    `finishedRoot == nil` (grayed out, not hidden) since it's the one
+    destination that genuinely needs the tree; Apps runs its own
+    independent scan and stays available throughout, matching how it
+    already worked in the Cleanup restructure above.
+  - **`CleanupStage` gained a `.scanning` case** (alongside `.findings`/
+    `.review`/`.receipt`), shown while `coordinator.state == .scanning` and
+    the user hasn't tapped Review Findings yet. `advanceStageIfNeeded`
+    (an `.onChange(of: coordinator.state)` handler) leaves it automatically
+    the moment the scan itself leaves `.scanning` for any reason - finished
+    or cancelled - so a scan that completes while the user is still looking
+    at the Scanning card doesn't strand them there.
+  - **`ScanningCardView`'s big ring is a hand-drawn rotating arc, not a
+    system `ProgressView`** - macOS's own indeterminate `ProgressView`
+    renders as the small multi-dot activity spinner regardless of the
+    frame it's given, not a rotating ring with a visible gap, so there's no
+    system control to defer to for this specific look. The small in-flight
+    row's spinner *is* a real `ProgressView`, where the system spinner is
+    exactly what's wanted - the choice is per-element, not a blanket
+    "custom-draw everything here."
+  - **Real-machine testing surfaced a genuine, unresolved tension: fast-path
+    finding scans and the main tree scan share `BlockingIO`'s single global
+    dispatch queue and semaphore, so on the heaviest scans (a full `/`
+    scan with 10M+ items) the fast-path scans can take 30-50+ seconds to
+    complete even though they touch orders of magnitude fewer paths.**
+    Confirmed live: on one whole-disk test scan, no findings appeared for
+    roughly the first 30-40 seconds despite `AppManagerScanner`/
+    `PurgeScanner.fixedPathCategories` only needing to read `/Applications`
+    and ~30 fixed paths, then all four then-available findings (package
+    manager caches, unused applications, Xcode build artifacts, simulator
+    runtimes) appeared together shortly after, with the sidebar total and
+    sidebar findings list updating live and correctly. Findings did stream
+    in before the scan finished, and never appeared to shrink, matching
+    the design handoff's requirements - but the *first* finding landed
+    later than the handoff's "thirty seconds" framing implies for a scan
+    this large, because `BlockingIO`'s queue doesn't distinguish which
+    caller submitted a given blocking syscall, so a fast-path scan's ~30
+    requests queue behind however many the unbounded main-scan fan-out has
+    already submitted. Not fixed here - `BlockingIO` is a shared,
+    process-wide primitive every scan in the app depends on, and tuning its
+    fairness (e.g. task-priority-aware scheduling, or a separate small
+    high-priority lane for fast-path work) is real, independently-riskable
+    surgery on a hot path outside this task's scope. Revisit if this
+    proves to matter in practice on real (not just pathologically large)
+    disks - typical scans of a home directory or a single volume without
+    `/System/Volumes` firmlink traversal are far smaller and shouldn't hit
+    this contention nearly as hard.

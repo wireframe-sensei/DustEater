@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Streaming Cleanup scan**: findings now appear on screen while a scan is
+  still running, instead of only after it finishes
+  - The Scanning stage shows a live status card (items scanned, current
+    path, a running "Found so far" total) plus each finding as it's
+    discovered, with a Review Findings button that's enabled the whole
+    time - jumping into Cleanup doesn't stop the scan, findings and the
+    sidebar total keep updating live
+  - Most findings (package manager caches, Xcode's fixed cache paths,
+    simulator runtimes, unused applications, old downloads) no longer wait
+    for the full scan to finish at all - only duplicate files and
+    project-local build artifacts (`node_modules` etc.) genuinely need the
+    complete picture, and stream in once it's ready
+  - Cancel Scan keeps every finding already discovered - cancelling stops
+    the scan, not the results
 - **Cleanup**: The app now restructures around a scan -> ranked findings ->
   review -> receipt flow, replacing the old five-way sidebar (Disks &
   Folders, Overview, Duplicates & Large Files, Developer Kit, App Manager)
