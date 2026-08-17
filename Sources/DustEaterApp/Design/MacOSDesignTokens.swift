@@ -86,6 +86,17 @@ extension Color {
     /// kit specifies a fainter track than that, so this is a real gap, not
     /// laziness about reaching for the system color first (C4).
     static let progressTrack = adaptiveColor(light: (0, 0, 0, 0.07), dark: (1, 1, 1, 0.04))
+
+    /// `Fills/Opaque Tertiary` - the Cleanup screen's card background
+    /// (finding groups, the scanning card, review/receipt panels). Per the
+    /// design handoff's token section, the opaque fill scale runs primary
+    /// 10% down to quinary 2% in five even steps - tertiary is the middle
+    /// step, 6%. No system `NSColor` sits at 6%; `.quaternarySystemFill`
+    /// (nearest semantic candidate) doesn't publish a fixed percentage and
+    /// visually reads lighter than this kit's card fill, so - same
+    /// reasoning as `progressTrack` above - this is a real gap, not
+    /// laziness about reaching for a system color first.
+    static let opaqueTertiaryFill = adaptiveColor(light: (0, 0, 0, 0.06), dark: (1, 1, 1, 0.06))
 }
 
 /// Treemap tile geometry with no HIG/control-size equivalent - these are
@@ -121,6 +132,39 @@ enum TooltipMetrics {
     /// under the pointer.
     static let offsetX: CGFloat = 20
     static let offsetY: CGFloat = -50
+}
+
+/// Card geometry for the Cleanup / Review / Receipt screens, with no HIG
+/// control-size equivalent - these are surface decisions (which radius a
+/// card at a given nesting level uses), not control chrome, so they
+/// deliberately sit outside `ControlMetrics` the same way `TreemapMetrics`
+/// does: routing a card through `ControlMetrics.isCapsule` at Large/XL would
+/// turn it into a giant pill.
+enum CleanupMetrics {
+    /// Finding-group cards and the scanning card - the design handoff's
+    /// largest card radius tier.
+    static let findingCardRadius: CGFloat = 14
+    /// Secondary panels: rebuild-commands card, "Never touched" card, the
+    /// receipt's before/after card.
+    static let panelCardRadius: CGFloat = 12
+    /// Row-level cards: Review's grouped item rows, the filter bar.
+    static let rowCardRadius: CGFloat = 10
+    static let disclosureRotationDuration: Double = 0.12
+}
+
+extension View {
+    /// A 1pt inset stroke using `Labels/Quaternary` - the hairline ring
+    /// every Cleanup/Review/Receipt card is drawn with, per the design
+    /// handoff. `.quaternaryLabelColor` is already documented (see
+    /// `Color.progressTrack` above) as the system color matching this kit's
+    /// 10% quaternary label alpha exactly, so this reuses it directly rather
+    /// than adding another custom token.
+    func hairlineRing(cornerRadius: CGFloat) -> some View {
+        overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(Color(nsColor: .quaternaryLabelColor), lineWidth: 1)
+        )
+    }
 }
 
 extension View {
