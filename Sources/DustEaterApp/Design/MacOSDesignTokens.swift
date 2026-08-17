@@ -150,6 +150,26 @@ enum CleanupMetrics {
     /// Row-level cards: Review's grouped item rows, the filter bar.
     static let rowCardRadius: CGFloat = 10
     static let disclosureRotationDuration: Double = 0.12
+    /// The Scanning card's indeterminate ring - diameter and one full
+    /// rotation's duration, per the design handoff's Motion section.
+    static let scanningRingDiameter: CGFloat = 34
+    static let scanningRingRotationDuration: Double = 1.4
+    /// "200ms progress fills" per the handoff's Motion section - applied
+    /// here to numeric values that climb as findings stream in (the
+    /// sidebar's reclaimable total, the scanning card's "Found so far"
+    /// figure), not a literal progress bar.
+    static let progressFillDuration: Double = 0.2
+}
+
+extension Animation {
+    /// The Scanning card's indeterminate ring rotation - `cubic-bezier(0.4,
+    /// 0, 0.2, 1)` over `CleanupMetrics.scanningRingRotationDuration`,
+    /// repeating forever, per the design handoff's Motion section
+    /// verbatim. Swift's `timingCurve` takes the same four control-point
+    /// values a CSS `cubic-bezier()` does.
+    static let scanningRingRotation = Animation
+        .timingCurve(0.4, 0, 0.2, 1, duration: CleanupMetrics.scanningRingRotationDuration)
+        .repeatForever(autoreverses: false)
 }
 
 extension View {

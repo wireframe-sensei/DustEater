@@ -12,7 +12,6 @@ struct ContentView: View {
     @State private var screen: TopLevelScreen = .home
     @State private var coordinator = ScanCoordinator()
     @State private var selectedTheme: ColorTheme = .weighted
-    @State private var totalDiskSize: Int64 = 0
     // Plain reference type held for stable identity across body
     // re-evaluations (same pattern as `coordinator` above) - its internal
     // cache writes are not `@State`, so they're invisible to SwiftUI's
@@ -75,21 +74,24 @@ struct ContentView: View {
                 }
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .scanning(let progress):
-                ScanningStateView(progress: progress, totalDiskSize: totalDiskSize, onCancel: {
-                    coordinator.cancelScan()
-                    backToHome()
-                })
-            case .finished(let root):
+            case .scanning, .finished, .cancelled:
+                // Scanning is a stage of the Cleanup task now, not a
+                // separate screen - CleanupShellView shows the live
+                // Scanning card while `coordinator.state == .scanning`,
+                // streaming findings in as they're discovered, and carries
+                // straight through to `.finished`/`.cancelled` without
+                // being torn down and rebuilt.
                 CleanupShellView(
-                    root: root,
                     coordinator: coordinator,
                     treemapRects: treemapRects(for:),
                     treemapCache: treemapCache,
                     selectedTheme: $selectedTheme,
                     onBackToHome: backToHome,
                     onScanFolder: chooseFolder,
-                    onRescan: { startScan(path: root.path) }
+                    onRescan: {
+                        guard let path = coordinator.rootPath else { return }
+                        startScan(path: path)
+                    }
                 )
             case .needsFullDiskAccess(let path):
                 PermissionBannerView(path: path, onBackToHome: backToHome)
@@ -134,14 +136,6 @@ struct ContentView: View {
     private func startScan(path: String) {
         screen = .scanFlow
         coordinator.zoomNode = nil
-
-        // Get total disk size
-        let url = URL(fileURLWithPath: path)
-        if let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]),
-           let totalCapacity = values.volumeTotalCapacity {
-            totalDiskSize = Int64(totalCapacity)
-        }
-
         treemapCache.invalidate()
         coordinator.startScan(path: path)
     }
@@ -157,13 +151,6 @@ struct ContentView: View {
 
         screen = .scanFlow
         coordinator.zoomNode = nil
-
-        // Get total disk size
-        if let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]),
-           let totalCapacity = values.volumeTotalCapacity {
-            totalDiskSize = Int64(totalCapacity)
-        }
-
         treemapCache.invalidate()
         coordinator.startScan(path: url.path)
     }
@@ -235,85 +222,6 @@ final class TreemapCache {
     func invalidate() {
         key = nil
         cachedRects = []
-    }
-}
-
-// MARK: - Scanning State
-struct ScanningStateView: View {
-    let progress: ScanProgressSnapshot
-    let totalDiskSize: Int64
-    let onCancel: () -> Void
-
-    var progressRatio: Double {
-        // Calculate progress based on bytes scanned vs total disk size
-        guard totalDiskSize > 0 else { return 0.01 }
-        let ratio = Double(progress.bytesScanned) / Double(totalDiskSize)
-        return min(0.99, max(0.01, ratio))  // Cap at 99% until scan completes
-    }
-
-    var body: some View {
-        ZStack {
-            Color(nsColor: .windowBackgroundColor)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Spacer()
-
-                ZStack {
-                    // Doughnut progress ring background
-                    Circle()
-                        .stroke(Color.progressTrack, lineWidth: 12)
-                        .frame(width: 280, height: 280)
-
-                    // Doughnut progress ring (animated to progress)
-                    Circle()
-                        .trim(from: 0, to: progressRatio)
-                        .stroke(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.accentColor, Color.accentColor.opacity(0.6)]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            style: StrokeStyle(lineWidth: 12, lineCap: .round)
-                        )
-                        .frame(width: 280, height: 280)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.easeInOut(duration: 0.5), value: progressRatio)
-
-                    // Center content
-                    VStack(spacing: DustEaterTheme.Spacing.md) {
-                        ProgressView()
-
-                        VStack(spacing: 8) {
-                            Text("\(progress.itemsScanned) items scanned")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.primary)
-
-                            Text(ByteFormatter.string(fromBytes: progress.bytesScanned))
-                                .font(.title2.weight(.semibold))
-                                .foregroundStyle(Color.accentColor)
-
-                            Text(progress.currentPath)
-                                .font(.callout.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: 300)
-                        }
-                    }
-                    .frame(width: 240)
-                }
-
-                Spacer()
-
-                Button("Cancel", action: onCancel)
-                    .font(.control)
-                    .buttonStyle(.bordered)
-                    .padding(.bottom, DustEaterTheme.Spacing.lg)
-            }
-            .controlSize(.large)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
     }
 }
 

@@ -4,13 +4,15 @@ import DustEaterCore
 
 /// The persistent post-scan shell: a disk-context block plus a three-item
 /// sidebar (Cleanup / Explore / Apps) around whichever destination is
-/// active. Replaces the old `MainContentView`, which only ever showed the
-/// treemap - that content now lives here as the `.explore` destination,
-/// alongside the new Cleanup -> Review -> Receipt flow. Cleanup is the
-/// default landing destination, per the design handoff.
+/// active. Mounted as soon as a scan starts (not gated on the tree
+/// finishing) so Cleanup's own Scanning stage can show live, streaming
+/// findings - see `ScanningCardView` and `ScanCoordinator`'s `findings`/
+/// `inFlightFindingIDs`. Explore still needs the finished tree and is
+/// unavailable until then; Apps runs its own independent scan and is
+/// available throughout.
 struct CleanupShellView: View {
     enum Destination: Hashable { case cleanup, explore, apps }
-    enum CleanupStage { case findings, review, receipt }
+    enum CleanupStage { case scanning, findings, review, receipt }
 
     struct ReceiptData: Identifiable {
         let id = UUID()
@@ -22,7 +24,6 @@ struct CleanupShellView: View {
         var canUndo: Bool { !permanently && !trashedItems.isEmpty }
     }
 
-    let root: FileNode
     let coordinator: ScanCoordinator
     let treemapRects: (CGSize) -> [TreemapRect]
     let treemapCache: TreemapCache
@@ -32,10 +33,13 @@ struct CleanupShellView: View {
     let onRescan: () -> Void
 
     @State private var destination: Destination = .cleanup
-    @State private var cleanupStage: CleanupStage = .findings
+    // Starts on the Scanning stage - see `advanceStageIfNeeded`, which
+    // moves it to `.findings` either when the user taps Review Findings or
+    // automatically once the scan leaves `.scanning` on its own (finished
+    // or cancelled), whichever happens first.
+    @State private var cleanupStage: CleanupStage = .scanning
 
     // Cleanup
-    @State private var cleanupScanner = CleanupScanner()
     @State private var selection = SelectionStore()
     // Package manager caches expanded on first run, per the design's State table.
     @State private var expandedFindings: Set<CleanupFindingID> = [.packageManagerCaches]
@@ -59,17 +63,28 @@ struct CleanupShellView: View {
     @State private var backStack: [FileNode?] = []
     @State private var forwardStack: [FileNode?] = []
 
+    /// The scanned tree, once available - `nil` during `.scanning` and
+    /// after a cancel that happened before the tree finished. Explore is
+    /// the only destination that actually needs this; Cleanup and Apps
+    /// work off `coordinator.findings` / their own independent scan.
+    private var finishedRoot: FileNode? {
+        if case .finished(let root) = coordinator.state { return root }
+        return nil
+    }
+
+    private var volumeName: String {
+        if let finishedRoot { return finishedRoot.name }
+        if let rootPath = coordinator.rootPath { return (rootPath as NSString).lastPathComponent }
+        return ""
+    }
+
     private var selectedNode: FileNode? {
-        guard let selectedPath else { return nil }
-        return root.node(atPath: selectedPath)
+        guard let selectedPath, let finishedRoot else { return nil }
+        return finishedRoot.node(atPath: selectedPath)
     }
 
     private var findings: [CleanupFinding] {
-        switch cleanupScanner.state {
-        case .scanning(let measured): measured
-        case .loaded(let loaded): loaded
-        default: []
-        }
+        coordinator.findings
     }
 
     private var totalReclaimable: Int64 {
@@ -89,11 +104,14 @@ struct CleanupShellView: View {
             }
         }
         .task {
-            cleanupScanner.scan(root: root)
             loadDiskContext()
         }
-        .task {
-            xcodeArchives = await XcodeArchiveLister.listArchives(in: root)
+        .task(id: finishedRoot?.path) {
+            guard let finishedRoot else { return }
+            xcodeArchives = await XcodeArchiveLister.listArchives(in: finishedRoot)
+        }
+        .onChange(of: coordinator.state) {
+            advanceStageIfNeeded()
         }
         .sheet(isPresented: $showXcodeArchives) {
             XcodeArchivesListView(archives: $xcodeArchives, onDeleted: { path in handleItemDeleted(path) })
@@ -129,6 +147,19 @@ struct CleanupShellView: View {
         }
     }
 
+    /// Leaves the Scanning stage the moment the scan itself leaves
+    /// `.scanning` - whether that's because it finished normally or was
+    /// cancelled. A no-op once the user has already tapped Review Findings
+    /// (stage is already past `.scanning` by then) and a no-op for
+    /// `.review`/`.receipt`, which this must never interrupt.
+    private func advanceStageIfNeeded() {
+        guard cleanupStage == .scanning else { return }
+        switch coordinator.state {
+        case .scanning: break
+        default: cleanupStage = .findings
+        }
+    }
+
     // MARK: - Sidebar
 
     private var sidebar: some View {
@@ -151,7 +182,7 @@ struct CleanupShellView: View {
             HStack(spacing: 6) {
                 Image(systemName: "internaldrive")
                     .foregroundStyle(.secondary)
-                Text(root.name)
+                Text(volumeName)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
             }
@@ -191,19 +222,19 @@ struct CleanupShellView: View {
     private var navRows: some View {
         VStack(spacing: 2) {
             navRow(.cleanup, label: "Cleanup", systemImage: "sparkles", trailing: totalReclaimable > 0 ? ByteFormatter.string(fromBytes: totalReclaimable) : nil)
-            navRow(.explore, label: "Explore", systemImage: "square.grid.2x2", trailing: nil)
+            navRow(.explore, label: "Explore", systemImage: "square.grid.2x2", trailing: nil, isEnabled: finishedRoot != nil)
             navRow(.apps, label: "Apps", systemImage: "app.badge.checkmark", trailing: nil)
         }
     }
 
-    private func navRow(_ target: Destination, label: String, systemImage: String, trailing: String?) -> some View {
-        // Cleanup stays the highlighted row through Review and Receipt too -
-        // those are stages of the same task, not a different destination.
+    private func navRow(_ target: Destination, label: String, systemImage: String, trailing: String?, isEnabled: Bool = true) -> some View {
+        // Cleanup stays the highlighted row through Scanning, Review, and
+        // Receipt too - those are stages of the same task, not a different
+        // destination.
         let isSelected = destination == target
         return Button {
             guard destination != target else { return }
             destination = target
-            if target == .cleanup { cleanupStage = .findings }
         } label: {
             HStack(spacing: 9) {
                 Image(systemName: systemImage)
@@ -213,6 +244,8 @@ struct CleanupShellView: View {
                     Text(trailing)
                         .font(.system(size: 11).monospacedDigit())
                         .foregroundStyle(isSelected ? .white.opacity(0.85) : .secondary)
+                        .contentTransition(.numericText())
+                        .animation(.easeOut(duration: CleanupMetrics.progressFillDuration), value: trailing)
                 }
             }
             .padding(.horizontal, 8)
@@ -221,6 +254,9 @@ struct CleanupShellView: View {
             .background(isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
+        .help(isEnabled ? "" : "Available once the scan finishes")
     }
 
     @ViewBuilder
@@ -255,9 +291,11 @@ struct CleanupShellView: View {
                 }
             }
         case .explore:
-            FileTreeListView(root: root, selectedPath: $selectedPath, onSelectNode: { node in
-                if node.isDirectory { navigate(to: node) }
-            }, expandedPaths: $expandedPaths)
+            if let finishedRoot {
+                FileTreeListView(root: finishedRoot, selectedPath: $selectedPath, onSelectNode: { node in
+                    if node.isDirectory { navigate(to: node) }
+                }, expandedPaths: $expandedPaths)
+            }
         case .apps:
             EmptyView()
         }
@@ -305,6 +343,25 @@ struct CleanupShellView: View {
     @ViewBuilder
     private var cleanupDetail: some View {
         switch cleanupStage {
+        case .scanning:
+            if case .scanning(let snapshot) = coordinator.state {
+                ScanningCardView(
+                    volumeName: volumeName,
+                    snapshot: snapshot,
+                    onReviewFindings: { cleanupStage = .findings },
+                    onCancel: { coordinator.cancelScan() }
+                )
+                .navigationTitle("Cleanup")
+            } else {
+                // Dead-end guard: `coordinator.state` moved on (finished,
+                // cancelled, or a different terminal case entirely) in the
+                // gap between this view rendering and `onChange` firing.
+                // `advanceStageIfNeeded` handles the normal path; this is
+                // the one-frame fallback so nothing renders blank.
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
         case .findings:
             ZStack(alignment: .bottom) {
                 CleanupView(
@@ -360,16 +417,18 @@ struct CleanupShellView: View {
     }
 
     private func loadDiskContext() {
-        let url = URL(fileURLWithPath: root.path)
+        guard let rootPath = coordinator.rootPath else { return }
+        let url = URL(fileURLWithPath: rootPath)
         if let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey]),
            let total = values.volumeTotalCapacity, let available = values.volumeAvailableCapacity {
             diskCapacity = (Int64(total), Int64(available))
         }
-        purgeableBytes = DiskTelemetryService.purgeableBytes(atPath: root.path)
+        purgeableBytes = DiskTelemetryService.purgeableBytes(atPath: rootPath)
     }
 
     private func currentAvailableCapacity() -> Int64 {
-        let url = URL(fileURLWithPath: root.path)
+        guard let rootPath = coordinator.rootPath else { return diskCapacity.available }
+        let url = URL(fileURLWithPath: rootPath)
         guard let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
               let available = values.volumeAvailableCapacity else {
             return diskCapacity.available
@@ -378,9 +437,9 @@ struct CleanupShellView: View {
     }
 
     /// The only commit point in the app. Runs off the main actor via
-    /// `CleanupCommitter`, then reconciles both `cleanupScanner`'s findings
-    /// and the live scan tree (`coordinator`) so Explore and the sidebar
-    /// total stay correct without a rescan.
+    /// `CleanupCommitter`, then reconciles both `coordinator`'s findings
+    /// and the live scan tree so Explore and the sidebar total stay
+    /// correct without a rescan.
     private func performCommit(permanently: Bool) {
         isCommitting = true
         commitErrorMessage = nil
@@ -391,7 +450,7 @@ struct CleanupShellView: View {
             let result = await CleanupCommitter.commit(items, permanently: permanently)
             await MainActor.run {
                 isCommitting = false
-                cleanupScanner.removeDeletedPaths(result.deletedPaths)
+                coordinator.removeDeletedPaths(result.deletedPaths)
                 reconcileScanTree(result.deletedPaths)
                 selection.clear()
 
@@ -440,115 +499,128 @@ struct CleanupShellView: View {
 
     @ViewBuilder
     private var exploreDetail: some View {
-        VStack(spacing: 0) {
-            if let selectedNode, !selectedNode.isDirectory {
-                FileDetailsView(node: selectedNode, root: root)
-            } else {
-                GeometryReader { geometry in
-                    TreemapView(
-                        rects: treemapRects(geometry.size),
-                        onSelectNode: { node in
-                            if node.isDirectory {
-                                navigate(to: node)
-                            } else {
-                                selectedPath = node.path
+        if let finishedRoot {
+            VStack(spacing: 0) {
+                if let selectedNode, !selectedNode.isDirectory {
+                    FileDetailsView(node: selectedNode, root: finishedRoot)
+                } else {
+                    GeometryReader { geometry in
+                        TreemapView(
+                            rects: treemapRects(geometry.size),
+                            onSelectNode: { node in
+                                if node.isDirectory {
+                                    navigate(to: node)
+                                } else {
+                                    selectedPath = node.path
+                                }
                             }
-                        }
-                    )
-                }
-            }
-        }
-        .navigationTitle(coordinator.zoomNode?.name ?? root.name)
-        .navigationSubtitle("Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    navigate(to: nil)
-                } label: {
-                    Image(systemName: "arrow.up.to.line")
-                }
-                .disabled(coordinator.zoomNode == nil)
-                .help("Go to overview")
-            }
-
-            ToolbarItemGroup(placement: .navigation) {
-                Button {
-                    navigateBack()
-                } label: {
-                    Image(systemName: "chevron.backward")
-                }
-                .disabled(backStack.isEmpty)
-                .keyboardShortcut("[", modifiers: .command)
-                .help("Go back")
-
-                Button {
-                    navigateForward()
-                } label: {
-                    Image(systemName: "chevron.forward")
-                }
-                .disabled(forwardStack.isEmpty)
-                .keyboardShortcut("]", modifiers: .command)
-                .help("Go forward")
-            }
-
-            if coordinator.hasDetectedChanges {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        onRescan()
-                    } label: {
-                        Label("Rescan", systemImage: "arrow.triangle.2.circlepath")
+                        )
                     }
-                    .tint(.orange)
-                    .help("Files on disk have changed since this scan - click to rescan")
                 }
             }
-
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    revealInFinder()
-                } label: {
-                    Label("Reveal in Finder", systemImage: "folder")
+            .navigationTitle(coordinator.zoomNode?.name ?? finishedRoot.name)
+            .navigationSubtitle("Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        navigate(to: nil)
+                    } label: {
+                        Image(systemName: "arrow.up.to.line")
+                    }
+                    .disabled(coordinator.zoomNode == nil)
+                    .help("Go to overview")
                 }
-                .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
-                .help("Reveal the selected item in Finder")
 
-                Button {
-                    copyPath()
-                } label: {
-                    Label("Copy Path", systemImage: "square.on.square")
+                ToolbarItemGroup(placement: .navigation) {
+                    Button {
+                        navigateBack()
+                    } label: {
+                        Image(systemName: "chevron.backward")
+                    }
+                    .disabled(backStack.isEmpty)
+                    .keyboardShortcut("[", modifiers: .command)
+                    .help("Go back")
+
+                    Button {
+                        navigateForward()
+                    } label: {
+                        Image(systemName: "chevron.forward")
+                    }
+                    .disabled(forwardStack.isEmpty)
+                    .keyboardShortcut("]", modifiers: .command)
+                    .help("Go forward")
                 }
-                .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
-                .help("Copy the selected item's full path")
 
-                Button(role: .destructive) {
-                    itemToDelete = selectedNode
-                    showDeleteAlert = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                .disabled((selectedNode?.isSyntheticGroupingNode ?? false) || selectedNode.map { !FileOperations.canDelete(at: $0.path) } ?? true)
-                .help("Move the selected item to the Trash, or delete it permanently")
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    ForEach(ColorTheme.allCases, id: \.self) { theme in
+                if coordinator.hasDetectedChanges {
+                    ToolbarItem(placement: .primaryAction) {
                         Button {
-                            selectedTheme = theme
+                            onRescan()
                         } label: {
-                            HStack {
-                                Text(theme.displayName).font(.control)
-                                if theme == selectedTheme {
-                                    Image(systemName: "checkmark")
+                            Label("Rescan", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .tint(.orange)
+                        .help("Files on disk have changed since this scan - click to rescan")
+                    }
+                }
+
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        revealInFinder()
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "folder")
+                    }
+                    .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
+                    .help("Reveal the selected item in Finder")
+
+                    Button {
+                        copyPath()
+                    } label: {
+                        Label("Copy Path", systemImage: "square.on.square")
+                    }
+                    .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
+                    .help("Copy the selected item's full path")
+
+                    Button(role: .destructive) {
+                        itemToDelete = selectedNode
+                        showDeleteAlert = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled((selectedNode?.isSyntheticGroupingNode ?? false) || selectedNode.map { !FileOperations.canDelete(at: $0.path) } ?? true)
+                    .help("Move the selected item to the Trash, or delete it permanently")
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        ForEach(ColorTheme.allCases, id: \.self) { theme in
+                            Button {
+                                selectedTheme = theme
+                            } label: {
+                                HStack {
+                                    Text(theme.displayName).font(.control)
+                                    if theme == selectedTheme {
+                                        Image(systemName: "checkmark")
+                                    }
                                 }
                             }
                         }
+                    } label: {
+                        Label(selectedTheme.displayName, systemImage: "paintpalette")
                     }
-                } label: {
-                    Label(selectedTheme.displayName, systemImage: "paintpalette")
+                    .help("Change color theme")
                 }
-                .help("Change color theme")
             }
+        } else {
+            // Dead-end guard: the Explore nav row is disabled while there's
+            // no finished tree, but nothing prevents `destination` from
+            // already being `.explore` when a rescan starts.
+            VStack(spacing: 8) {
+                ProgressView()
+                Text("Explore needs the scan to finish first")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -597,7 +669,7 @@ struct CleanupShellView: View {
 
     private func handleItemDeleted(_ deletedPath: String) {
         reconcileScanTree([deletedPath])
-        cleanupScanner.removeDeletedPaths([deletedPath])
+        coordinator.removeDeletedPaths([deletedPath])
 
         if let zoomNode = coordinator.zoomNode, deletedPath == zoomNode.path {
             coordinator.zoomNode = nil
