@@ -93,4 +93,96 @@ struct DiskScannerTests {
         #expect(node.itemCount == 1 + 6 + 36 + 36)
         #expect(node.size > 0)
     }
+
+    // MARK: - scanWithTypeIndex
+
+    @Test func scanWithTypeIndexClassifiesFilesByExtension() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write(100, to: "movie.mp4", in: root)
+        try write(200, to: "photo.jpg", in: root)
+        try write(300, to: "src/main.swift", in: root)
+        try write(50, to: "notes.unknownext", in: root)
+
+        let scanner = DiskScanner()
+        let (_, index) = await scanner.scanWithTypeIndex(rootPath: root.path)
+
+        #expect(index.total(for: .videos).fileCount == 1)
+        #expect(index.total(for: .photos).fileCount == 1)
+        #expect(index.total(for: .codeAndProjects).fileCount == 1)
+        // No extension - falls into .other, not silently dropped.
+        #expect(index.total(for: .other).fileCount == 1)
+    }
+
+    /// A whole `.app` bundle becomes exactly one `.applications` entry
+    /// carrying its full recursive size - individual files inside (an
+    /// Info.plist, a .png icon, a compiled binary) must never separately
+    /// appear under `.documents`/`.photos`/`.other`, which would both
+    /// double-count bytes and clutter those categories with app internals.
+    @Test func appBundleBecomesOneApplicationsEntryNotIndividualFiles() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write(1000, to: "MyApp.app/Contents/Info.plist", in: root)
+        try write(2000, to: "MyApp.app/Contents/Resources/icon.png", in: root)
+        try write(3000, to: "MyApp.app/Contents/MacOS/MyApp", in: root)
+        try write(500, to: "standalone.png", in: root)
+
+        let scanner = DiskScanner()
+        let (_, index) = await scanner.scanWithTypeIndex(rootPath: root.path)
+
+        #expect(index.total(for: .applications).fileCount == 1)
+        #expect(index.entries(for: .applications).first?.name == "MyApp.app")
+        #expect(index.total(for: .applications).totalBytes >= 6000)
+
+        // Only the standalone file outside the bundle counts as .photos -
+        // the bundle's own icon.png must not also appear there.
+        #expect(index.total(for: .photos).fileCount == 1)
+        #expect(index.entries(for: .photos).first?.name == "standalone.png")
+    }
+
+    /// A helper `.app` nested inside another `.app` (Xcode ships several)
+    /// must not become its own second `.applications` entry - it's already
+    /// counted as part of the outer bundle's recursive size.
+    @Test func nestedAppBundleIsNotDoubleRecorded() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write(1000, to: "Outer.app/Contents/MacOS/Outer", in: root)
+        try write(500, to: "Outer.app/Contents/XPCServices/Helper.app/Contents/MacOS/Helper", in: root)
+
+        let scanner = DiskScanner()
+        let (_, index) = await scanner.scanWithTypeIndex(rootPath: root.path)
+
+        #expect(index.total(for: .applications).fileCount == 1)
+        #expect(index.entries(for: .applications).first?.name == "Outer.app")
+    }
+
+    @Test func photosLibraryMembershipIsDetectedByPath() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write(1000, to: "Photos Library.photoslibrary/originals/1/x.heic", in: root)
+        try write(1000, to: "not-a-library/y.heic", in: root)
+
+        let scanner = DiskScanner()
+        let (_, index) = await scanner.scanWithTypeIndex(rootPath: root.path)
+
+        let photoEntries = index.entries(for: .photos)
+        #expect(photoEntries.count == 2)
+        #expect(photoEntries.first { $0.name == "x.heic" }?.isPhotosManaged == true)
+        #expect(photoEntries.first { $0.name == "y.heic" }?.isPhotosManaged == false)
+    }
+
+    @Test func scanIgnoringTypeIndexStillWorksUnchanged() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write(100, to: "file.bin", in: root)
+
+        let scanner = DiskScanner()
+        let node = await scanner.scan(rootPath: root.path)
+
+        #expect(node.size >= 100)
+    }
 }

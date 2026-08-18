@@ -14,7 +14,8 @@ public struct ScanProgress: Sendable {
 /// in its own child task, and results are combined functionally as tasks
 /// complete (`for await`), so there is no shared mutable state and thus no
 /// locking is needed to accumulate sizes - each level simply sums the sizes
-/// its children returned.
+/// its children returned. The file-type index (`FileTypeIndexPartial`) rides
+/// along the same fold for the same reason - see `scanWithTypeIndex`.
 ///
 /// Task fan-out itself is intentionally *unbounded* - Swift tasks are cheap
 /// (they multiplex over the cooperative pool at suspension points rather
@@ -59,16 +60,41 @@ public actor DiskScanner {
         rootPath: String,
         onProgress: (@Sendable (ScanProgress) -> Void)? = nil
     ) async -> FileNode {
+        let (node, _) = await scanWithTypeIndex(rootPath: rootPath, onProgress: onProgress)
+        return node
+    }
+
+    /// Same walk as `scan(rootPath:onProgress:)`, but also returns a
+    /// `FileTypeIndex` classifying every file encountered - built for free
+    /// alongside the existing tree construction (each directory task
+    /// classifies its own files and folds the result into its return value,
+    /// exactly how `FileNode.size`/`itemCount` are already combined), not as
+    /// a second pass or a separate scan - deliberately, so the file-type
+    /// browser doesn't become a seventh consumer of the already-contended
+    /// `BlockingIO` queue.
+    ///
+    /// Only `ScanCoordinator`'s main scan actually uses the index; every
+    /// other `DiskScanner` caller (the small per-path fallback scans in
+    /// `PurgeScanner`, `AppManagerScanner`'s `/Applications` scan, etc.)
+    /// keeps calling `scan(rootPath:onProgress:)` above and simply discards
+    /// it - those scans are bounded to a few thousand files at most, so the
+    /// classify-and-discard cost there is negligible.
+    public func scanWithTypeIndex(
+        rootPath: String,
+        onProgress: (@Sendable (ScanProgress) -> Void)? = nil
+    ) async -> (FileNode, FileTypeIndex) {
         let name = (rootPath as NSString).lastPathComponent
         seenInodes.withLock { $0.removeAll() }
-        return await Self.scanDirectory(
+        let (node, partial) = await Self.scanDirectory(
             path: rootPath,
             name: name,
             seenInodes: seenInodes,
+            insideAppBundle: false,
             onEntries: { [weak self] items, bytes, path in
                 await self?.reportProgress(addedItems: items, addedBytes: bytes, path: path, handler: onProgress)
             }
         )
+        return (node, partial.finalize())
     }
 
     private func reportProgress(
@@ -97,14 +123,22 @@ public actor DiskScanner {
     /// actor's serial executor entirely, so sibling directory tasks in the
     /// `TaskGroup` below can genuinely run concurrently instead of each
     /// needing to acquire `self`'s isolation just to build a `FileNode`.
+    ///
+    /// - Parameter insideAppBundle: true once recursion has entered a
+    ///   `.app` bundle - files inside are never individually classified
+    ///   into the type index (their bytes are attributed to the bundle as
+    ///   one `.applications` entry instead, recorded once the bundle's own
+    ///   recursive size is known), and a nested bundle (a helper `.app`
+    ///   inside another) is never separately recorded.
     private static func scanDirectory(
         path: String,
         name: String,
         seenInodes: OSAllocatedUnfairLock<Set<UInt64>>,
+        insideAppBundle: Bool,
         onEntries: @escaping @Sendable (Int, Int64, String) async -> Void
-    ) async -> FileNode {
+    ) async -> (FileNode, FileTypeIndexPartial) {
         guard !Task.isCancelled else {
-            return FileNode(name: name, path: path, size: 0, isDirectory: true)
+            return (FileNode(name: name, path: path, size: 0, isDirectory: true), FileTypeIndexPartial())
         }
 
         let entries: [RawDirEntry]
@@ -113,12 +147,13 @@ public actor DiskScanner {
         } catch {
             // Permission denied or the entry vanished mid-scan; treat as an
             // empty leaf rather than aborting the whole scan.
-            return FileNode(name: name, path: path, size: 0, isDirectory: true)
+            return (FileNode(name: name, path: path, size: 0, isDirectory: true), FileTypeIndexPartial())
         }
 
         var fileTotal: Int64 = 0
         var fileChildren: [FileNode] = []
         var subdirEntries: [RawDirEntry] = []
+        var typeIndex = FileTypeIndexPartial()
         fileChildren.reserveCapacity(entries.count)
         subdirEntries.reserveCapacity(entries.count)
 
@@ -144,62 +179,107 @@ public actor DiskScanner {
                         isDirectory: false
                     )
                 )
+
+                if shouldCount, countedSize > 0, !insideAppBundle {
+                    let category = FileTypeClassifier.category(forFileName: entry.name)
+                    typeIndex.record(
+                        FileTypeIndexEntry(
+                            path: childPath,
+                            name: entry.name,
+                            sizeBytes: countedSize,
+                            isPhotosManaged: childPath.contains(".photoslibrary/")
+                        ),
+                        category: category
+                    )
+                }
             }
         }
 
         guard !Task.isCancelled else {
-            return FileNode(
-                name: name,
-                path: path,
-                size: fileTotal,
-                isDirectory: true,
-                children: fileChildren,
-                itemCount: fileChildren.count + 1
+            return (
+                FileNode(
+                    name: name,
+                    path: path,
+                    size: fileTotal,
+                    isDirectory: true,
+                    children: fileChildren,
+                    itemCount: fileChildren.count + 1
+                ),
+                typeIndex
             )
         }
 
         await onEntries(fileChildren.count, fileTotal, path)
 
         guard !subdirEntries.isEmpty else {
-            return FileNode(
-                name: name,
-                path: path,
-                size: fileTotal,
-                isDirectory: true,
-                children: fileChildren,
-                itemCount: fileChildren.count + 1
+            return (
+                FileNode(
+                    name: name,
+                    path: path,
+                    size: fileTotal,
+                    isDirectory: true,
+                    children: fileChildren,
+                    itemCount: fileChildren.count + 1
+                ),
+                typeIndex
             )
         }
 
         var subdirChildren: [FileNode] = []
         subdirChildren.reserveCapacity(subdirEntries.count)
 
-        await withTaskGroup(of: FileNode.self) { group in
+        await withTaskGroup(of: (FileNode, FileTypeIndexPartial).self) { group in
             for entry in subdirEntries {
                 guard !Task.isCancelled else { break }
 
                 var childPath = path
                 childPath.append("/")
                 childPath.append(entry.name)
+                let childInsideAppBundle = insideAppBundle || entry.name.hasSuffix(".app")
                 group.addTask {
-                    await Self.scanDirectory(path: childPath, name: entry.name, seenInodes: seenInodes, onEntries: onEntries)
+                    await Self.scanDirectory(
+                        path: childPath,
+                        name: entry.name,
+                        seenInodes: seenInodes,
+                        insideAppBundle: childInsideAppBundle,
+                        onEntries: onEntries
+                    )
                 }
             }
-            for await child in group {
+            for await (child, childTypeIndex) in group {
                 subdirChildren.append(child)
+                typeIndex.merge(childTypeIndex)
+            }
+        }
+
+        // Whole `.app` bundles become one `.applications` entry each,
+        // recorded here rather than at classification time - only now,
+        // after the bundle's subtree has fully returned, is its complete
+        // recursive size known. Skipped entirely when this directory is
+        // itself already inside a bundle, so a nested helper app is never
+        // double-recorded.
+        if !insideAppBundle {
+            for child in subdirChildren where child.name.hasSuffix(".app") {
+                typeIndex.record(
+                    FileTypeIndexEntry(path: child.path, name: child.name, sizeBytes: child.size, isPhotosManaged: false),
+                    category: .applications
+                )
             }
         }
 
         let subdirTotal = subdirChildren.reduce(into: Int64(0)) { $0 += $1.size }
         let subdirItems = subdirChildren.reduce(into: 0) { $0 += $1.itemCount }
 
-        return FileNode(
-            name: name,
-            path: path,
-            size: fileTotal + subdirTotal,
-            isDirectory: true,
-            children: fileChildren + subdirChildren,
-            itemCount: fileChildren.count + subdirItems + 1
+        return (
+            FileNode(
+                name: name,
+                path: path,
+                size: fileTotal + subdirTotal,
+                isDirectory: true,
+                children: fileChildren + subdirChildren,
+                itemCount: fileChildren.count + subdirItems + 1
+            ),
+            typeIndex
         )
     }
 }

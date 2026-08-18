@@ -44,6 +44,11 @@ public final class ScanCoordinator {
     public private(set) var findings: [CleanupFinding] = []
     /// Finding categories whose scan hasn't completed yet.
     public private(set) var inFlightFindingIDs: Set<CleanupFindingID> = []
+    /// Explore's browse-by-type index, built for free alongside the main
+    /// tree scan (see `DiskScanner.scanWithTypeIndex`) - populated once
+    /// `state` reaches `.finished`, empty before that and after a
+    /// pre-finish cancel, same as `finishedRoot` elsewhere.
+    public private(set) var typeIndex: FileTypeIndex = .empty
 
     private var scanTask: Task<Void, Never>?
     /// Every tree-independent finding scan started by
@@ -68,6 +73,7 @@ public final class ScanCoordinator {
         rootPath = path
         findings = []
         inFlightFindingIDs = Set(CleanupFindingID.allCases)
+        typeIndex = .empty
         state = .scanning(ScanProgressSnapshot(
             itemsScanned: 0,
             bytesScanned: 0,
@@ -105,13 +111,14 @@ public final class ScanCoordinator {
 
             let scanStartTime = DispatchTime.now()
             let scanner = DiskScanner()
-            let node = await scanner.scan(rootPath: path) { [weak self] progress in
+            let (node, typeIndex) = await scanner.scanWithTypeIndex(rootPath: path) { [weak self] progress in
                 DispatchQueue.main.async {
                     self?.applyProgress(progress)
                 }
             }
             let scanElapsed = Double(DispatchTime.now().uptimeNanoseconds - scanStartTime.uptimeNanoseconds) / 1_000_000_000
             debugLog("📊 Filesystem scan: \(String(format: "%.3f", scanElapsed))s")
+            self.typeIndex = typeIndex
 
             guard !Task.isCancelled else {
                 self.inFlightFindingIDs = []
