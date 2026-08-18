@@ -52,7 +52,7 @@ public enum CleanupFindingsBuilder {
 
             return CleanupItem(
                 id: entity.id,
-                findingID: .unusedApplications,
+                source: .finding(.unusedApplications),
                 name: entity.displayName,
                 detail: abbreviated(entity.appPath),
                 sizeBytes: entity.trueTotalSize,
@@ -90,7 +90,7 @@ public enum CleanupFindingsBuilder {
         let items = entries.map { entry -> CleanupItem in
             CleanupItem(
                 id: entry.file.path,
-                findingID: .oldDownloads,
+                source: .finding(.oldDownloads),
                 name: entry.file.name,
                 detail: abbreviated(entry.file.path),
                 sizeBytes: entry.file.logicalSize,
@@ -120,7 +120,7 @@ public enum CleanupFindingsBuilder {
             let copyWord = older.count == 1 ? "copy" : "copies"
             return CleanupItem(
                 id: set.contentHash,
-                findingID: .duplicateFiles,
+                source: .finding(.duplicateFiles),
                 name: survivor.name,
                 detail: "\(abbreviatedParentDirectory(of: oldest.path)) - \(older.count) older \(copyWord) of \(set.files.count)",
                 sizeBytes: set.wastedBytes,
@@ -156,7 +156,7 @@ public enum CleanupFindingsBuilder {
         let items = targets.filter { $0.sizeBytes > 0 }.map { target in
             CleanupItem(
                 id: target.path,
-                findingID: findingID,
+                source: .finding(findingID),
                 name: target.definition.title,
                 detail: abbreviated(target.path),
                 sizeBytes: target.sizeBytes,

@@ -87,14 +87,35 @@ public enum CleanupFindingID: String, Sendable, CaseIterable, Identifiable {
     }
 }
 
+/// Where a `CleanupItem` came from - one of the six ranked Cleanup findings,
+/// or a file the user selected while browsing Explore's Type board/detail.
+/// The two are grouped and labeled differently in Review (a finding's fixed
+/// `displayName` vs. a file type's), but flow through exactly one
+/// `SelectionStore`/`CleanupCommitter` either way - Explore selecting a file
+/// must never create a second, parallel delete path.
+public enum CleanupItemSource: Sendable, Equatable, Hashable {
+    case finding(CleanupFindingID)
+    case fileType(FileTypeCategory)
+
+    /// The uppercase group header Review shows above this item's row.
+    public var reviewGroupTitle: String {
+        switch self {
+        case .finding(let id): return id.displayName
+        case .fileType(let category): return category.displayName
+        }
+    }
+}
+
 /// One selectable (or, for `.reportOnly`, informational-only) row within a
-/// `CleanupFinding`. Flattens whatever underlying type produced it - a
-/// `PurgeTarget`, an `AppDiskEntity`, a `DuplicateSet`, or a large/old file -
-/// into one shape the Cleanup, Review, and Receipt screens can all render
-/// without knowing which finding it came from.
+/// `CleanupFinding`, or a file selected from Explore's Type board. Flattens
+/// whatever underlying type produced it - a `PurgeTarget`, an
+/// `AppDiskEntity`, a `DuplicateSet`, a large/old file, or an
+/// `ExploreFileDetail` - into one shape the Cleanup, Review, and Receipt
+/// screens can all render without knowing which finding (or type) it came
+/// from.
 public struct CleanupItem: Sendable, Identifiable, Equatable {
     public let id: String
-    public let findingID: CleanupFindingID
+    public let source: CleanupItemSource
     public let name: String
     /// Secondary line shown under the name - a path, or for duplicates
     /// "~/Documents - 1 older copy of 2".
@@ -122,13 +143,21 @@ public struct CleanupItem: Sendable, Identifiable, Equatable {
     /// means they should be able to go look at it.
     public let revealPath: String
     public let blockingAppBundleID: String?
-    /// Always `false` for the six findings in this batch. Explore (item 6,
-    /// out of scope here) is what sets this - see Review's destination rule.
+    /// `false` for every Cleanup finding - system junk is never the user's
+    /// own content. `true` for every item Explore's Type board/detail
+    /// produces, which is exactly what activates Review's Trash-only rule:
+    /// once a user file can enter the selection, permanent deletion is
+    /// withheld entirely for the whole selection, not just that one item.
     public let isUserContent: Bool
+    /// True if this file is iCloud-synced - badged in the UI with a
+    /// warning that deleting it removes it from every device, not just
+    /// this Mac. Always `false` for Cleanup findings (none of the six can
+    /// live in iCloud Drive).
+    public let isiCloudSynced: Bool
 
     public init(
         id: String,
-        findingID: CleanupFindingID,
+        source: CleanupItemSource,
         name: String,
         detail: String,
         sizeBytes: Int64,
@@ -140,10 +169,11 @@ public struct CleanupItem: Sendable, Identifiable, Equatable {
         appBundlePath: String? = nil,
         revealPath: String,
         blockingAppBundleID: String? = nil,
-        isUserContent: Bool = false
+        isUserContent: Bool = false,
+        isiCloudSynced: Bool = false
     ) {
         self.id = id
-        self.findingID = findingID
+        self.source = source
         self.name = name
         self.detail = detail
         self.sizeBytes = sizeBytes
@@ -156,13 +186,19 @@ public struct CleanupItem: Sendable, Identifiable, Equatable {
         self.revealPath = revealPath
         self.blockingAppBundleID = blockingAppBundleID
         self.isUserContent = isUserContent
+        self.isiCloudSynced = isiCloudSynced
     }
 
     public var isReportOnly: Bool { safety == .reportOnly }
 }
 
 /// One ranked group on the Cleanup screen - fixed editorial copy from
-/// `CleanupFindingID` plus the items actually found on this Mac.
+/// `CleanupFindingID` plus the items actually found on this Mac. Explore's
+/// files don't use this type at all - they're plain `CleanupItem`s grouped
+/// directly by `CleanupItemSource.fileType` in Review, with no equivalent
+/// "finding card" of their own on the Type board (no ranking/recommendation
+/// ever appears on the user's own content, so there's nothing for a
+/// `CleanupFinding`-shaped group to rank).
 public struct CleanupFinding: Sendable, Identifiable, Equatable {
     public let id: CleanupFindingID
     /// Largest first.

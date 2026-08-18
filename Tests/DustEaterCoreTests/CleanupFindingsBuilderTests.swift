@@ -147,10 +147,10 @@ struct CleanupFindingsBuilderTests {
 
     @Test func rankCompactsNilsAndSortsByReclaimableBytesDescending() {
         let small = CleanupFinding(id: .packageManagerCaches, items: [
-            CleanupItem(id: "/small", findingID: .packageManagerCaches, name: "Small", detail: "d", sizeBytes: 100, safety: .safe, deletablePaths: ["/small"], revealPath: "/small"),
+            CleanupItem(id: "/small", source: .finding(.packageManagerCaches), name: "Small", detail: "d", sizeBytes: 100, safety: .safe, deletablePaths: ["/small"], revealPath: "/small"),
         ])
         let large = CleanupFinding(id: .oldDownloads, items: [
-            CleanupItem(id: "/large", findingID: .oldDownloads, name: "Large", detail: "d", sizeBytes: 10_000, safety: .safe, deletablePaths: ["/large"], revealPath: "/large"),
+            CleanupItem(id: "/large", source: .finding(.oldDownloads), name: "Large", detail: "d", sizeBytes: 10_000, safety: .safe, deletablePaths: ["/large"], revealPath: "/large"),
         ])
 
         let ranked = CleanupFindingsBuilder.rank([small, nil, large])
@@ -159,7 +159,7 @@ struct CleanupFindingsBuilderTests {
 
     @Test func reclaimableBytesExcludesReportOnlyItems() {
         let finding = CleanupFinding(id: .simulatorRuntimes, items: [
-            CleanupItem(id: "/runtimes", findingID: .simulatorRuntimes, name: "Runtimes", detail: "d", sizeBytes: 5_000, safety: .reportOnly, hint: "Manage in Xcode", deletablePaths: [], revealPath: "/runtimes"),
+            CleanupItem(id: "/runtimes", source: .finding(.simulatorRuntimes), name: "Runtimes", detail: "d", sizeBytes: 5_000, safety: .reportOnly, hint: "Manage in Xcode", deletablePaths: [], revealPath: "/runtimes"),
         ])
         #expect(finding.totalBytes == 5_000)
         #expect(finding.reclaimableBytes == 0)

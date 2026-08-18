@@ -26,7 +26,7 @@ struct CleanupCommitterTests {
     ) -> CleanupItem {
         CleanupItem(
             id: id,
-            findingID: .packageManagerCaches,
+            source: .finding(.packageManagerCaches),
             name: id,
             detail: "detail",
             sizeBytes: sizeBytes,
