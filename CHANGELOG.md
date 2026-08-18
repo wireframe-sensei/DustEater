@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Browse by type in Explore**: Explore gains a Treemap · By Type toggle,
+  By Type as the default
+  - A type board ranks your files into eight categories by total size -
+    Applications, Code & Projects, Videos, Photos, Audio, Documents,
+    Archives & Installers, Other - each showing its own size and share of
+    the disk. Applications doesn't drill in here; it opens App Manager,
+    since that's where uninstalling actually happens
+  - Opening a category shows every file in it, largest first, with Size and
+    "Not opened in" filters - built for the actual question, "videos over
+    500 MB I haven't opened in a year"
+  - Clicking a file opens a preview pane with a real thumbnail, not a
+    generic icon; the checkbox next to a row is what selects it, so
+    browsing and selecting are separate gestures
+  - This is your own content, so there's no ranking, no recommendation,
+    and no "select all" anywhere on this screen. Files still managed by
+    Photos are shown locked, with a note to delete them from the Photos
+    app instead. Files stored in iCloud are badged with a warning that
+    deleting them removes them from every device
+  - Selecting a file here joins the same selection tray and Review screen
+    Cleanup uses - there's no second delete path. Because this is your own
+    content rather than junk the app is recommending, Review drops the
+    permanent-delete option entirely once anything from Explore is
+    selected, offering only the Trash
 - **Streaming Cleanup scan**: findings now appear on screen while a scan is
   still running, instead of only after it finishes
   - The Scanning stage shows a live status card (items scanned, current

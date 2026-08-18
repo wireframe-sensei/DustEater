@@ -894,3 +894,136 @@ oversights - don't "fix" these without the user asking:
     disks - typical scans of a home directory or a single volume without
     `/System/Volumes` firmlink traversal are far smaller and shouldn't hit
     this contention nearly as hard.
+- **Browse by type in Explore (item 6 of the design handoff) -
+  `Sources/DustEaterCore/Explore/`, `Sources/DustEaterApp/Explore/`,
+  `DiskScanner.scanWithTypeIndex`:** Explore gains a `Treemap · By Type`
+  segmented control, By Type default. Items 7-8 (permission onboarding,
+  menu bar monitoring) are not built.
+  - **The type index is built inside `DiskScanner`'s existing walk, not as
+    a seventh independent scan.** `scanDirectory` now returns
+    `(FileNode, FileTypeIndexPartial)` and folds the index bottom-up
+    exactly the way it already folds `size`/`itemCount` - a plain value
+    type combined via `merge`, not a shared lock-protected object touched
+    from every concurrent directory task (that would have added a second,
+    different concurrency pattern to a hot path with famously delicate
+    documented reasoning already, right above this note). Benchmarked
+    live with `dustbench`, alternating run order across several rounds to
+    cancel out disk-cache warming: against a real 107,000-file/22 GB
+    directory the delta between `scan(rootPath:)` and
+    `scanWithTypeIndex(rootPath:)` was -3.2% (i.e. within noise, not
+    slower); against an 8,500-file `node_modules` tree (many small files,
+    the classifier's worst case) it was +0.1%. Both benchmark runs were
+    manual and are not preserved as an automated test - see
+    `Sources/dustbench/main.swift`'s git history if this needs re-checking.
+  - **`.app` bundles are classified structurally, not by extension.** Each
+    subdirectory task threads an `insideAppBundle` flag through recursion
+    (set the moment a `.app`-suffixed directory is entered); files inside
+    are never individually classified, and the whole bundle becomes one
+    `.applications` `FileTypeIndexEntry` recorded by the *parent* directory
+    task once the bundle's subtree returns with its complete recursive
+    size known. A nested bundle (a helper `.app` inside another) is never
+    separately recorded, since its own recursion already sees
+    `insideAppBundle == true` inherited from the outer one.
+  - **Each category's entry list is capped at `FileTypeIndex.
+    maxEntriesPerCategory` (2000) during the scan itself, not truncated
+    afterward - totals are always exact regardless.** A category like
+    "Code & Projects" can have well over 100,000 files on a real disk;
+    holding all of them in memory for the lifetime of a scan would be a
+    real regression, and the Type detail list only ever needs the largest
+    ones anyway (default sort is size-descending - "the real user query is
+    videos over 500 MB"). `FileTypeIndexPartial.record` only sorts/trims
+    once a category's bucket grows to double the eventual cap, not on
+    every insert, so most directories (which never come close) pay nothing
+    for this.
+  - **`FileTypeClassifier` is a hybrid, not pure `UTType` conformance.**
+    Source/script/project-config extensions (`.swift`, `.json`, `.yml`,
+    `.xcodeproj`, ...) are a hand-maintained list checked first, since
+    precision matters most for "is this actually part of a project" and
+    many everyday project files don't reliably conform to
+    `UTType.sourceCode` in the system's own hierarchy. Physical-media
+    buckets (video/image/audio/pdf/archive) fall back to real `UTType`
+    conformance, whose system-declared hierarchies are reliable and don't
+    need a maintained list. Results are cached per-extension behind a lock
+    (not per-file) - a scan sees the same handful of extensions millions
+    of times over, and `UTType(filenameExtension:)` does real work.
+  - **`CleanupItem.findingID: CleanupFindingID` became `source:
+    CleanupItemSource` (`.finding` or `.fileType`).** Explore's files
+    needed to flow through the exact same `SelectionStore`/`ReviewView`/
+    `CleanupCommitter` pipeline Cleanup findings already use - "selecting
+    in Explore must not create a second, parallel delete path" - and
+    `CleanupFindingID` has no case that means "a browsed file type."
+    `CleanupItemSource.reviewGroupTitle` is what Review's group headers
+    use instead of `CleanupFindingID.displayName` directly, so both
+    sources render through one `groupSection` function.
+  - **Photos-managed originals reuse the existing `.reportOnly`/`hint`
+    mechanism (`FileTypeBrowser.ExploreFileDetail.makeCleanupItem`) rather
+    than a new "locked" concept.** A managed original gets
+    `safety: .reportOnly` and `hint: "Managed by Photos - delete it in the
+    Photos app."` - the exact same lock-glyph-instead-of-checkbox path
+    Cleanup's own report-only findings (iOS Simulator runtimes) already
+    render, and `SelectionStore.toggle` already refuses `.reportOnly` items
+    as a hard backstop, so a managed original genuinely cannot enter the
+    selection, not just get discouraged in the view. iCloud sync status is
+    a new, separate `CleanupItem.isiCloudSynced` flag - unlike Photos
+    management, an iCloud file is still fully deletable, just badged with
+    a warning, so it doesn't fit the report-only shape at all.
+  - **`isUserContent` (dormant since the Cleanup restructure - see above)
+    is now live: every `CleanupItem` Explore produces sets it
+    unconditionally `true`.** This is what activates Review's Trash-only
+    rule the moment any Explore file joins the selection, per the design
+    handoff: "once user files can enter the selection, Review must drop
+    the permanent-delete option entirely." No changes were needed in
+    `ReviewView` itself to make this work - the branch has existed and
+    been tested since the Cleanup restructure; item 6 is simply the first
+    thing that can ever set the flag that triggers it.
+  - **Photos/iCloud status and last-opened date are fetched on demand,
+    only for the type a user actually opens, never eagerly for all
+    eight at scan time.** `FileTypeIndexEntry` (built during the scan)
+    carries only what's free - path, name, allocated size, and a cheap
+    path-component check for Photos-library membership. `FileTypeBrowser.
+    loadDetails` does the real I/O (`lstat` via the existing
+    `FileStatReader`, `AppLastUsedDateProvider` reused as-is, and a new
+    `URLResourceKey.isUbiquitousItemKey` check for iCloud) only for the
+    entries a category's already-capped list contains, bounded at 2000
+    regardless of the category's true file count. This is the third
+    similar-but-distinct bounded-concurrency leaf-task window in the
+    codebase (after `DuplicateDetector.withConcurrentTasks` and
+    `PurgeScanner.measure(_:addingTo:totalTargets:)`) and deliberately
+    isn't unified with either - same reasoning as those two: different
+    shapes, coincidental overlap, not a proven-three-times duplication.
+  - **The preview pane's "Details" table (video dimensions/duration, audio
+    sample rate, image dimensions, PDF page count) described in the design
+    handoff is not built - only Size and Last Opened are shown.** Getting
+    real values needs per-type metadata APIs (`AVAsset` for video/audio,
+    `CGImageSource` for image dimensions, `PDFKit` for page count), each
+    with its own loading cost and failure modes; scoped out to keep this
+    batch bounded. The thumbnail itself (the thing the handoff calls out
+    as removing the most hesitation - "nobody deletes a video they cannot
+    see") is fully real, via `QLThumbnailGenerator`. Revisit as a
+    self-contained addition to `TypeFilePreviewPane` if wanted.
+  - **`ThumbnailImageView`/`ThumbnailCache` (`Sources/DustEaterApp/
+    Explore/ThumbnailImageView.swift`) is the same `QLThumbnailGenerator`
+    wrapper the old, deleted `Inspector/ThumbnailImageView.swift` used
+    (recovered from git history, not rewritten from scratch), generalized
+    in one way: the `ImageFileDetector.isImage` gate is removed, since
+    `QLThumbnailGenerator` itself already handles "can't generate a
+    thumbnail for this" by returning nil, and Explore needs thumbnails for
+    video/PDF/documents, not just images. The placeholder is now an
+    injected `@ViewBuilder`, not a hardcoded `NSWorkspace` Finder icon,
+    since Explore's placeholder is the type-tinted "Press Space for Quick
+    Look" card the design calls for, not a generic icon.
+  - **A segmented `Picker`'s reported intrinsic height inside
+    `TypeDetailView`'s filter bar did not match its rendered height** -
+    confirmed live (screenshot testing showed a ~300pt-tall card around a
+    normal-height control row) and not fully root-caused; neither
+    `.fixedSize()` on the pickers nor `.fixedSize(vertical: true)` on the
+    containing `HStack` corrected it. Worked around with an explicit
+    `.frame(height: 24)` on the filter bar's `HStack` rather than
+    continuing to chase the SwiftUI layout-negotiation cause. If this
+    class of bug recurs elsewhere (another segmented `Picker` in a
+    constrained `HStack`), reach for the explicit height first.
+  - **Applications never drills into a Type detail screen, structurally,
+    not just by copy.** `TypeBoardView`'s `onSelectType` branches
+    `category == .applications` before ever setting `selectedTypeCategory`
+    - App Manager already does true-footprint uninstall, and building a
+    second one was explicitly out of scope.
