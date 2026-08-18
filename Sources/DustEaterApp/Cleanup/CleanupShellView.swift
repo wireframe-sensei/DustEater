@@ -28,6 +28,7 @@ struct CleanupShellView: View {
     let treemapRects: (CGSize) -> [TreemapRect]
     let treemapCache: TreemapCache
     @Binding var selectedTheme: ColorTheme
+    let monitoringSettings: MonitoringSettingsStore
     let onBackToHome: () -> Void
     let onScanFolder: () -> Void
     let onRescan: () -> Void
@@ -53,6 +54,10 @@ struct CleanupShellView: View {
     // Disk context block
     @State private var diskCapacity: (total: Int64, available: Int64) = (0, 0)
     @State private var purgeableBytes: Int64 = 0
+    // Item 9: checked live alongside the rest of the disk context, not
+    // remembered from onboarding - see `CleanupView.hasFullDiskAccess`.
+    @State private var hasFullDiskAccess = true
+    @State private var showAccessRequestSheet = false
 
     // Explore - moved here from the old `MainContentView`, unchanged.
     @State private var selectedPath: String?
@@ -151,6 +156,23 @@ struct CleanupShellView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(commitErrorMessage ?? "")
+        }
+        // Re-checks access on close, not just on first load - "Grant
+        // Access" is only useful if the card actually goes away once the
+        // user has done it.
+        .sheet(isPresented: $showAccessRequestSheet, onDismiss: loadDiskContext) {
+            NavigationStack {
+                ScrollView {
+                    FullDiskAccessStepView(onSkip: { showAccessRequestSheet = false })
+                        .padding(24)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showAccessRequestSheet = false }
+                    }
+                }
+            }
+            .frame(width: 560, height: 520)
         }
     }
 
@@ -381,7 +403,9 @@ struct CleanupShellView: View {
                     canUndo: receipt?.canUndo ?? false,
                     onReviewShortcut: { if selection.count > 0 { cleanupStage = .review } },
                     onUndoShortcut: performUndo,
-                    onRescanShortcut: onRescan
+                    onRescanShortcut: onRescan,
+                    hasFullDiskAccess: hasFullDiskAccess,
+                    onGrantAccess: { showAccessRequestSheet = true }
                 )
                 .padding(.bottom, selection.count > 0 ? 60 : 0)
 
@@ -408,6 +432,7 @@ struct CleanupShellView: View {
                     freeAfter: receipt.freeAfter,
                     permanently: receipt.permanently,
                     canUndo: receipt.canUndo,
+                    monitoringSettings: monitoringSettings,
                     onUndo: performUndo,
                     onBackToCleanup: {
                         cleanupStage = .findings
@@ -431,6 +456,7 @@ struct CleanupShellView: View {
             diskCapacity = (Int64(total), Int64(available))
         }
         purgeableBytes = DiskTelemetryService.purgeableBytes(atPath: rootPath)
+        hasFullDiskAccess = AccessProbe.hasFullDiskAccess()
     }
 
     private func currentAvailableCapacity() -> Int64 {

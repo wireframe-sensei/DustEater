@@ -97,6 +97,13 @@ extension Color {
     /// reasoning as `progressTrack` above - this is a real gap, not
     /// laziness about reaching for a system color first.
     static let opaqueTertiaryFill = adaptiveColor(light: (0, 0, 0, 0.06), dark: (1, 1, 1, 0.06))
+
+    /// `Fills/Opaque Quaternary` - one step lighter than `opaqueTertiaryFill`
+    /// on the same five-step 10%->2% scale (primary 10, secondary 8,
+    /// tertiary 6, quaternary 4, quinary 2). Used for the welcome flow's
+    /// upcoming-step indicator bars, where an unreached step needs to read
+    /// as visibly fainter than the tertiary-fill cards around it.
+    static let opaqueQuaternaryFill = adaptiveColor(light: (0, 0, 0, 0.04), dark: (1, 1, 1, 0.04))
 }
 
 /// Treemap tile geometry with no HIG/control-size equivalent - these are

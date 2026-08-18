@@ -4,12 +4,16 @@ import DustEaterCore
 
 struct ContentView: View {
     private enum TopLevelScreen: Equatable {
+        case welcome
         case home
         case scanFlow
         case appManager
     }
 
-    @State private var screen: TopLevelScreen = .home
+    let monitoringSettings: MonitoringSettingsStore
+    let statusItemController: StatusItemController
+
+    @State private var screen: TopLevelScreen = OnboardingStore.hasCompletedOnboarding ? .home : .welcome
     @State private var coordinator = ScanCoordinator()
     @State private var selectedTheme: ColorTheme = .weighted
     // Plain reference type held for stable identity across body
@@ -23,6 +27,18 @@ struct ContentView: View {
     // rescan or a return from a scan never re-triggers the auto-skip.
     @State private var hasCheckedAutoSkip = false
 
+    @Environment(\.openSettings) private var openSettings
+
+    /// Persisted so the menu bar's 6-hour check has a real volume to look
+    /// at even on a fresh launch, before any scan has happened in this
+    /// session - "Review in DustEater"/"Rescan Now" from the dropdown also
+    /// fall back to this when `coordinator` is still `.idle`.
+    private static let lastScannedPathKey = "DustEater.LastScannedPath"
+    private var lastScannedPath: String? {
+        get { UserDefaults.standard.string(forKey: Self.lastScannedPathKey) }
+        nonmutating set { UserDefaults.standard.set(newValue, forKey: Self.lastScannedPathKey) }
+    }
+
     private func treemapRects(for size: CGSize) -> [TreemapRect] {
         guard case .finished(let root) = coordinator.state else { return [] }
         let displayNode = coordinator.zoomNode ?? root
@@ -30,7 +46,31 @@ struct ContentView: View {
     }
 
     var body: some View {
+        Group {
+            screenContent
+        }
+        .task {
+            statusItemController.attach(
+                settings: monitoringSettings,
+                onReview: { reviewFromMenuBar() },
+                onRescan: { rescanFromMenuBar() },
+                onOpenSettings: {
+                    NSApp.activate(ignoringOtherApps: true)
+                    openSettings()
+                }
+            )
+            statusItemController.updateVolumePath(lastScannedPath ?? "/")
+        }
+    }
+
+    @ViewBuilder
+    private var screenContent: some View {
         switch screen {
+        case .welcome:
+            WelcomeView(onComplete: {
+                OnboardingStore.hasCompletedOnboarding = true
+                screen = .home
+            })
         case .home:
             DiskHomeView(
                 onSelectDisk: { path in
@@ -86,6 +126,7 @@ struct ContentView: View {
                     treemapRects: treemapRects(for:),
                     treemapCache: treemapCache,
                     selectedTheme: $selectedTheme,
+                    monitoringSettings: monitoringSettings,
                     onBackToHome: backToHome,
                     onScanFolder: chooseFolder,
                     onRescan: {
@@ -138,6 +179,36 @@ struct ContentView: View {
         coordinator.zoomNode = nil
         treemapCache.invalidate()
         coordinator.startScan(path: path)
+        lastScannedPath = path
+        statusItemController.updateVolumePath(path)
+    }
+
+    /// "Review in DustEater" from the menu bar dropdown or a notification's
+    /// Review action. Brings the window forward and, if this session never
+    /// actually scanned anything (e.g. the window was closed and this is
+    /// the app's first activity since), starts a real scan of the last
+    /// known volume rather than pointing at a stale, non-interactive
+    /// findings list - the monitoring check's own results have no
+    /// selection/delete pipeline attached to them.
+    private func reviewFromMenuBar() {
+        bringMainWindowToFront()
+        if case .idle = coordinator.state {
+            startScan(path: lastScannedPath ?? "/")
+        } else {
+            screen = .scanFlow
+        }
+    }
+
+    private func rescanFromMenuBar() {
+        bringMainWindowToFront()
+        startScan(path: lastScannedPath ?? coordinator.rootPath ?? "/")
+    }
+
+    private func bringMainWindowToFront() {
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = NSApp.windows.first(where: { $0.title == "DustEater" }) {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     private func chooseFolder() {

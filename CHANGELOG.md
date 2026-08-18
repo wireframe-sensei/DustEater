@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Menu bar monitoring**: an optional menu bar item keeps an eye on your
+  disk without keeping the app open
+  - Off by default. Turn it on from the Receipt screen's "Keep watching
+    this disk" card, or from Settings → Monitoring
+  - Shows a capacity gauge and free-space figure; click it for a dropdown
+    with your volume's free/purgeable space, the top reclaimable findings,
+    and one-click access to Review, Rescan, Pause Monitoring, and
+    Monitoring Settings
+  - Every 6 hours it re-checks package manager caches, downloads, and
+    unused applications only - it never walks your whole disk in the
+    background
+  - Two optional notifications, both off until you turn them on and never
+    more than once a day: free space dropping below a threshold (default
+    10%), and rebuildable caches building back up (default 5 GB) - the
+    second only ever counts caches, never your own files
+- **Permission onboarding**: a three-step welcome screen before your first
+  scan explains what DustEater does, asks for Full Disk Access (with the
+  app noticing the moment you grant it - no relaunch needed), and explains
+  why DustEater and Finder disagree about free space
+  - Declining is safe and explicit: DustEater still scans and still
+    reports real totals, it just tells you which locations it couldn't
+    read
+  - If a scan ran without Full Disk Access, Cleanup shows exactly which
+    four locations were skipped and why, with a one-click way to grant
+    access - the totals shown are never hedged, since everything measured
+    is real
 - **Browse by type in Explore**: Explore gains a Treemap · By Type toggle,
   By Type as the default
   - A type board ranks your files into eight categories by total size -

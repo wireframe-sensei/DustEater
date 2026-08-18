@@ -17,6 +17,13 @@ struct CleanupView: View {
     let onReviewShortcut: () -> Void
     let onUndoShortcut: () -> Void
     let onRescanShortcut: () -> Void
+    /// Item 9: `false` when this scan ran without Full Disk Access - shows
+    /// the limited-access card above the finding groups. Checked live
+    /// (`AccessProbe.hasFullDiskAccess()`), not remembered from onboarding,
+    /// so a user who granted access during onboarding and later revoked it
+    /// (or vice versa) sees the card reflect reality on the next scan.
+    let hasFullDiskAccess: Bool
+    let onGrantAccess: () -> Void
 
     @State private var focusedItemID: String?
     @State private var quickLookItem: CleanupItem?
@@ -30,6 +37,9 @@ struct CleanupView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     header
+                    if !hasFullDiskAccess {
+                        LimitedAccessCard(totalReclaimable: totalReclaimable, onGrantAccess: onGrantAccess)
+                    }
                     if findings.isEmpty {
                         emptyState
                     } else {
@@ -180,5 +190,70 @@ struct CleanupView: View {
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 4)
+    }
+}
+
+/// Item 9: shown above the finding groups when this scan ran without Full
+/// Disk Access. Per the design handoff, totals stay honest, not hedged -
+/// the 44pt header total above this card is never qualified with "at
+/// least" or an asterisk; this card states the gap once, in words, next to
+/// exactly what was skipped.
+private struct LimitedAccessCard: View {
+    let totalReclaimable: Int64
+    let onGrantAccess: () -> Void
+
+    /// Fixed, not derived from the scan - these four locations are always
+    /// what Full Disk Access unlocks, regardless of what this particular
+    /// scan happened to find.
+    private static let skippedLocations: [(path: String, reason: String)] = [
+        ("/Library/Caches", "System-wide caches, usually the largest single finding"),
+        ("~/Library/Containers", "Sandboxed app data - Mail, Messages, News"),
+        ("~/Library/Group Containers", "Data shared between apps from one developer"),
+        ("/private/var/folders", "Temporary files macOS keeps per session")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color(nsColor: .systemOrange))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Scanned without Full Disk Access")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Every figure above is real and measured. These four locations were skipped, so there is more to find than \(ByteFormatter.string(fromBytes: totalReclaimable)).")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 12)
+                Button("Grant Access", action: onGrantAccess)
+                    .font(.control)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color(nsColor: .systemOrange))
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(Self.skippedLocations.enumerated()), id: \.offset) { index, location in
+                    HStack {
+                        Text(location.path)
+                            .font(.system(size: 11).monospaced())
+                        Spacer()
+                        Text(location.reason)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 6)
+                    if index != Self.skippedLocations.count - 1 {
+                        Divider().opacity(0.2)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(Color(nsColor: .systemOrange).opacity(0.10), in: RoundedRectangle(cornerRadius: CleanupMetrics.panelCardRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: CleanupMetrics.panelCardRadius)
+                .strokeBorder(Color(nsColor: .systemOrange).opacity(0.20), lineWidth: 1)
+        )
     }
 }

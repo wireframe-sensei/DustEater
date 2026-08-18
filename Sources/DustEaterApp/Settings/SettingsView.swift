@@ -1,7 +1,10 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 
 struct SettingsView: View {
+    let monitoringSettings: MonitoringSettingsStore
+
     @State private var protectedAppsStore = ProtectedAppsStore()
     @Environment(\.controlMetrics) private var metrics
 
@@ -69,8 +72,13 @@ struct SettingsView: View {
             .tabItem {
                 Label("Protection", systemImage: "lock.shield")
             }
+
+            MonitoringSettingsPane(settings: monitoringSettings)
+                .tabItem {
+                    Label("Monitoring", systemImage: "gauge.with.dots.needle.33percent")
+                }
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 520, height: 620)
     }
 
     private func selectAndAddApp() {
@@ -90,5 +98,5 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView()
+    SettingsView(monitoringSettings: MonitoringSettingsStore())
 }

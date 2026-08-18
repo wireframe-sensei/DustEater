@@ -1027,3 +1027,190 @@ oversights - don't "fix" these without the user asking:
     `category == .applications` before ever setting `selectedTypeCategory`
     - App Manager already does true-footprint uninstall, and building a
     second one was explicitly out of scope.
+- **Permission onboarding (item 7 of the design handoff) -
+  `Sources/DustEaterCore/Onboarding/`, `Sources/DustEaterApp/Onboarding/`,
+  the Limited-access card in `CleanupView.swift`:** a three-step welcome
+  flow before the first scan, plus a Cleanup-screen card when a scan ran
+  without Full Disk Access. Item 8 (menu bar monitoring) is documented
+  separately below.
+  - **Access detection reuses `AttrListBulkReader.probeAccess`, the same
+    probe `ScanCoordinator` already uses to distinguish "doesn't exist"
+    from "access denied" before a scan.** `AccessProbe.hasFullDiskAccess(
+    checking:)` (Core, new) is a thin public wrapper around that
+    internal-to-the-module function, aimed at a fixed canary path
+    (`~/Library/Containers`) instead of whatever the user chose to scan -
+    the design handoff explicitly asks for this exact technique ("poll
+    readability of one known-protected path"). No new probing logic, no
+    widened visibility on `probeAccess` itself.
+  - **`OnboardingStore.hasCompletedOnboarding` gates the welcome flow, and
+    is deliberately *not* the thing that decides whether the Limited-access
+    card shows.** Onboarding is a once-per-install flag (has the user ever
+    been through the three steps); the Limited-access card checks
+    `AccessProbe.hasFullDiskAccess()` live, every time `CleanupShellView`
+    loads its disk context. This is what makes "skipped onboarding once,
+    granted access later in System Settings" and "completed onboarding,
+    then revoked access" both resolve correctly without extra state - the
+    live check is the single source of truth for "is access limited right
+    now," independent of how the user got there.
+  - **`FullDiskAccessStepView` is one component, reused in two genuinely
+    different contexts** - embedded as step 2 of `WelcomeView` (no chrome
+    of its own; the shared footer's Back/Continue drives navigation), and
+    presented standalone in a sheet from the Limited-access card's "Grant
+    Access" button (wrapped in a `NavigationStack` with its own Done
+    toolbar button). The component owns only the access-detection state
+    (`.task(id: accessState)` polling once a second while `.waiting`,
+    stopping automatically when the view disappears in either context);
+    the embedding context decides what "leaving" means via `onSkip`.
+  - **The welcome flow's centering needed `GeometryReader` +
+    `.frame(minWidth:minHeight:)` on the `ScrollView` content, not just
+    `.frame(maxWidth: .infinity)`.** A bare `Spacer` inside a `ScrollView`
+    has no extra room to expand into - the ScrollView sizes its content to
+    the content's own ideal size, so the column pinned to the top-left
+    instead of centering. Confirmed live via screenshot before and after.
+  - **Gotcha found because of the above fix, not before it**: once the
+    centering trick proposes "up to the full window height" down through
+    the view tree, `FullDiskAccessStepView`'s three diagram columns - each
+    containing a `Spacer(minLength: 8)` to pin their mockup to the bottom -
+    balloon to fill that entire proposal, since a `minHeight`-only frame
+    doesn't cap how much larger a view can grow when its parent offers
+    more room. Fixed with an explicit fixed `.frame(height: 140)` on each
+    column instead of `minHeight`. Worth remembering for any other
+    Spacer-containing card nested inside this same centering pattern.
+  - **The Limited-access card's four skipped-location rows
+    (`/Library/Caches`, `~/Library/Containers`, `~/Library/Group
+    Containers`, `/private/var/folders`) are fixed, not derived from the
+    scan.** They're always exactly what Full Disk Access unlocks,
+    regardless of what a given scan happened to find - deriving them from
+    the tree would require distinguishing "empty because nothing's there"
+    from "empty because we couldn't read it," which the scanner doesn't
+    currently surface per-directory.
+  - **Welcome step 3's capacity figures are read from the boot volume
+    (`/`), not from any particular scan target** - there is no scan target
+    chosen yet at this point in a first-run flow (the multi-volume case
+    hasn't reached `DiskHomeView` yet). The sidebar's own purgeable line
+    (shipped in the Cleanup restructure) is what repeats this for whichever
+    volume actually gets scanned, exactly as the design handoff specifies.
+- **Menu bar monitoring (item 8 of the design handoff) -
+  `Sources/DustEaterCore/Monitoring/MonitoringChecker.swift`,
+  `Sources/DustEaterApp/Monitoring/`:** an `NSStatusItem` with a capacity
+  ring + free-space figure, a custom dropdown, a 6-hour re-check of the
+  fast-path findings only, and two notifications. Settings live in a
+  Monitoring tab of the existing `Settings {}` scene - the sidebar stays
+  three items, as specified.
+  - **`MonitoringChecker.run()` calls exactly the same three static
+    functions `ScanCoordinator.startFastPathFindingScans` already calls**
+    (`PurgeScanner.fixedPathCategories()`, `AppManagerScanner.
+    scanInstalledApps()`, a direct `DiskScanner` scan of `~/Downloads`) and
+    nothing else - no tree walk, ever, in the background. It's
+    intentionally independent of any live `ScanCoordinator` instance: the
+    menu bar's numbers are the last check's, not whatever a foreground scan
+    happens to be showing, and monitoring must keep working after the main
+    window (and its `ScanCoordinator`) has been closed.
+  - **`UNUserNotificationCenter.current()` crashes outright - an uncaught
+    `NSInternalInconsistencyException`, "bundleProxyForCurrentProcess is
+    nil" - when the running process isn't inside a real `.app` bundle.**
+    Confirmed live, not assumed: `swift run`/the bare `.build/debug/
+    DustEaterApp` executable used for local dev and CI hits this on the
+    very first `UNUserNotificationCenter.current()` call. Every touch point
+    (`StatusItemController.attach`'s delegate/category registration,
+    `sendNotification`, `MonitoringSettingsPane`'s permission request) is
+    guarded behind `Bundle.main.bundleURL.pathExtension == "app"`. This is
+    the `UserNotifications` analogue of `DustEaterApp.setDockIcon`'s
+    `Bundle.module` guard - a different framework, the same "only a
+    packaged release `.app` has what this needs" shape.
+  - **`StatusItemController` is an `NSObject` subclass, not a plain Swift
+    class** - required for `#selector` target-action on the status item
+    button and for `UNUserNotificationCenterDelegate` conformance. It
+    reacts to `MonitoringSettingsStore` (an `@Observable`) via
+    `withObservationTracking`, re-registering itself inside the `onChange`
+    closure each time it fires - the non-View way to observe an
+    `@Observable` object, since nothing in SwiftUI reads this controller's
+    own state directly.
+  - **`monitoringSettings` and `statusItemController` are created at the
+    `DustEaterApp` level, not inside `ContentView`.** Two different
+    reasons for two different objects: `monitoringSettings` needs to be the
+    *same* instance passed into both the `WindowGroup` and the separate
+    `Settings {}` scene, so a toggle in one window is reflected in the
+    other immediately; `statusItemController` must outlive the main window
+    closing entirely, since the whole point of a menu bar presence is
+    working without a window open, and a `WindowGroup`'s content view (and
+    everything `@State` on it) is torn down when its window closes.
+  - **`NSPopover` sizing from an `NSHostingController` needed two fixes
+    stacked, not one - confirmed live, each attempted fix alone still
+    showed the popover at effectively zero height** (a highlighted status
+    item button with no visible panel below it, verified via screenshot
+    across several iterations before landing on this). `hostingController.
+    sizingOptions = [.preferredContentSize]` keeps AppKit's read of the
+    preferred size in sync with SwiftUI's real layout, but an explicit
+    `popover.contentSize = NSSize(width: 268, height: 480)` is what
+    actually made it reliable regardless of exactly when AppKit asks
+    relative to SwiftUI's first layout pass. Both are kept.
+  - **The two notifications use real `UNUserNotificationCenter` banners
+    with registered `UNNotificationAction`s ("Review", "Notify Less"), not
+    a custom-drawn overlay window matching the design handoff's literal
+    16pt-radius/ultra-thick-material mockup.** Real system notifications are
+    what users trust and recognize, and this app has no mechanism to draw a
+    persistent custom banner outside its own window - the same "prefer real
+    system APIs over hand-rolled approximations" reasoning the Cleanup
+    chrome rewrite already established. The two actions still are exactly
+    what the design specifies; only their pixel styling is OS-owned instead
+    of app-drawn.
+  - **The "reclaimable caches pass a threshold" notification is a threshold
+    check against the current 6-hour snapshot, capped at once per day - not
+    a true delta-since-last-cleanup computation.** The design's copy
+    ("since you last cleaned up") suggests tracking growth from a baseline;
+    doing that faithfully would need its own persisted baseline that resets
+    on every real commit, which is meaningfully more state for a batch
+    already large in scope. The simpler "did rebuildable bytes cross X,
+    and have we not already said so today" still satisfies the literal
+    rule as stated ("reclaimable caches pass a threshold") and safety rule
+    12 (rebuildable-safety findings only, so a growing Photos library or
+    video project can never trigger it) exactly as written.
+  - **`ContentView` persists `lastScannedPath` to `UserDefaults`**
+    (`DustEater.LastScannedPath`), independent of `coordinator.rootPath` -
+    the menu bar needs a real volume to check even on a fresh launch before
+    any scan has happened in this session, and "Review in DustEater"/
+    "Rescan Now" from the dropdown fall back to it when `coordinator` is
+    still `.idle` (e.g. the window was closed and this is the app's first
+    activity since relaunch). `reviewFromMenuBar` starts a real scan in
+    that case rather than pointing at a stale, non-interactive findings
+    list - the monitoring check's own results have no selection/delete
+    pipeline attached to them.
+  - **`bringMainWindowToFront` finds the main window by title
+    (`NSApp.windows.first(where: { $0.title == "DustEater" })`)** rather
+    than trying to distinguish it structurally from the Settings window,
+    sheets, or popovers - `WindowGroup("DustEater")` fixes that title, so
+    it's a reliable, simple heuristic already available with no new state.
+  - **Known limitation, not fixed here: closing the main window and later
+    reopening it from the menu bar loses in-session state** (scan
+    progress, findings, selection) - `WindowGroup`'s content view is torn
+    down with its window, so a fresh `ContentView` starts over from
+    `OnboardingStore`/`UserDefaults`-persisted state only. In the common
+    case (`lastScannedPath` persisted, `coordinator.state == .idle`)
+    "Review in DustEater" re-starts a real scan of the right volume rather
+    than showing nothing, which covers the everyday case; full window-state
+    restoration across a close/reopen cycle is real, separate scope this
+    task didn't take on.
+  - **Settings' `TabView` frame grew from 500x400 to 520x620** to fit the
+    Monitoring tab's content - the Protected Apps tab (unrelated to this
+    work) just gets more room at the same width; nothing there needed to
+    change.
+  - **Threshold pickers in `MonitoringSettingsPane` are preset `Menu`s (4
+    fixed values each for the low-space percentage and the junk-growth
+    byte count), not a slider or free-text field** - matches the design's
+    "small mono pop-up pill" description functionally without building a
+    custom numeric input control for a settings pane this size.
+  - **The "Check every 6 hours" pill is display-only, not an editable
+    control** - the design handoff's own copy treats 6 hours as fixed
+    ("the 6-hour monitoring check"), unlike the two thresholds, which are
+    explicitly "default-with-override."
+  - **Discovered during live testing, unrelated to this feature's own
+    code**: in this project's coding-agent sandbox specifically, syscalls
+    against this machine's real `~/Downloads` intermittently return `EINTR`
+    ("Interrupted system call") - reproduced even with a bare `ls
+    ~/Downloads` at the shell, so it's an environment artifact, not
+    something `DiskScanner`/`MonitoringChecker` introduced. Worth knowing
+    if a future session sees `MonitoringChecker`/the old-downloads finding
+    behave strangely (high CPU, a slow first check) on this specific
+    machine - it is very unlikely to reproduce on a real user's Mac, and no
+    code changed in response to it.

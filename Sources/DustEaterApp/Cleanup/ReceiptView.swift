@@ -11,6 +11,7 @@ struct ReceiptView: View {
     let freeAfter: Int64
     let permanently: Bool
     let canUndo: Bool
+    let monitoringSettings: MonitoringSettingsStore
     let onUndo: () -> Void
     let onBackToCleanup: () -> Void
 
@@ -73,6 +74,10 @@ struct ReceiptView: View {
                     .buttonStyle(.borderedProminent)
             }
 
+            if !monitoringSettings.showInMenuBar {
+                keepWatchingCard
+            }
+
             Spacer()
             Spacer()
         }
@@ -82,5 +87,34 @@ struct ReceiptView: View {
                 displayedBytes = Double(reclaimedBytes)
             }
         }
+    }
+
+    /// The other entry point into item 8's monitoring, alongside the
+    /// Settings window - offered here because right after a cleanup is
+    /// exactly when "keep watching so this doesn't build back up" reads as
+    /// useful rather than as an interruption.
+    private var keepWatchingCard: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "eye")
+                .font(.system(size: 20))
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Keep watching this disk")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("Show free space in the menu bar and tell you when caches build up again.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Toggle("", isOn: Binding(
+                get: { monitoringSettings.showInMenuBar },
+                set: { monitoringSettings.showInMenuBar = $0 }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+        }
+        .padding(14)
+        .frame(maxWidth: 420)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: CleanupMetrics.panelCardRadius))
     }
 }

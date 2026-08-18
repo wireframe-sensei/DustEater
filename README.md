@@ -106,6 +106,14 @@ swift run DustEaterApp
 Or open the folder in Xcode (`File → Open…`, select the package folder) and
 run the `DustEaterApp` scheme.
 
+> **Note:** `swift run`/a bare `.build/debug/DustEaterApp` executable isn't a
+> real `.app` bundle, and `UNUserNotificationCenter` (used by menu bar
+> monitoring's notifications) crashes outright the moment anything touches
+> it outside one. The app guards every call site against this, so running
+> it this way is otherwise fine - this is only worth knowing if you're
+> extending that code and see an unexplained crash on launch or when a
+> notification would fire.
+
 ### Other targets
 
 The package also builds two command-line tools on top of the same scanning
