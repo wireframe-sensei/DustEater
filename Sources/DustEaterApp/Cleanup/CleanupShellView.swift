@@ -63,6 +63,13 @@ struct CleanupShellView: View {
     @State private var backStack: [FileNode?] = []
     @State private var forwardStack: [FileNode?] = []
 
+    // Explore - browse by type (item 6). `.byType` is the default per the
+    // design handoff; `selectedTypeCategory` is nil for the Type board,
+    // set once the user drills into one type.
+    enum ExploreMode: String, CaseIterable { case treemap = "Treemap", byType = "By Type" }
+    @State private var exploreMode: ExploreMode = .byType
+    @State private var selectedTypeCategory: FileTypeCategory?
+
     /// The scanned tree, once available - `nil` during `.scanning` and
     /// after a cancel that happened before the tree finished. Explore is
     /// the only destination that actually needs this; Cleanup and Apps
@@ -495,119 +502,47 @@ struct CleanupShellView: View {
         }
     }
 
-    // MARK: - Explore detail (moved from the old `MainContentView`)
+    // MARK: - Explore detail
 
+    /// Item 6: a `Treemap · By Type` segmented control over the same
+    /// destination - Treemap is the existing, unchanged view (moved from
+    /// the old `MainContentView`); By Type is the new default. Explore is
+    /// the user's own content: nothing here is ever ranked, recommended, or
+    /// pre-selected, and any selection made here joins the same
+    /// `SelectionStore`/Review flow Cleanup uses - never a second delete path.
     @ViewBuilder
     private var exploreDetail: some View {
         if let finishedRoot {
             VStack(spacing: 0) {
-                if let selectedNode, !selectedNode.isDirectory {
-                    FileDetailsView(node: selectedNode, root: finishedRoot)
-                } else {
-                    GeometryReader { geometry in
-                        TreemapView(
-                            rects: treemapRects(geometry.size),
-                            onSelectNode: { node in
-                                if node.isDirectory {
-                                    navigate(to: node)
-                                } else {
-                                    selectedPath = node.path
-                                }
-                            }
+                exploreModeHeader
+
+                switch exploreMode {
+                case .treemap:
+                    treemapContent(root: finishedRoot)
+                case .byType:
+                    if let selectedTypeCategory {
+                        TypeDetailView(
+                            category: selectedTypeCategory,
+                            index: coordinator.typeIndex,
+                            selection: selection,
+                            onBack: { self.selectedTypeCategory = nil }
                         )
+                    } else {
+                        TypeBoardView(index: coordinator.typeIndex, onSelectType: { category in
+                            if category == .applications {
+                                destination = .apps
+                            } else {
+                                selectedTypeCategory = category
+                            }
+                        })
                     }
                 }
             }
-            .navigationTitle(coordinator.zoomNode?.name ?? finishedRoot.name)
-            .navigationSubtitle("Scanned in \(String(format: "%.2f", coordinator.scanDuration))s")
+            .navigationTitle(exploreMode == .treemap ? (coordinator.zoomNode?.name ?? finishedRoot.name) : "Explore")
+            .navigationSubtitle(exploreMode == .treemap ? "Scanned in \(String(format: "%.2f", coordinator.scanDuration))s" : "")
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        navigate(to: nil)
-                    } label: {
-                        Image(systemName: "arrow.up.to.line")
-                    }
-                    .disabled(coordinator.zoomNode == nil)
-                    .help("Go to overview")
-                }
-
-                ToolbarItemGroup(placement: .navigation) {
-                    Button {
-                        navigateBack()
-                    } label: {
-                        Image(systemName: "chevron.backward")
-                    }
-                    .disabled(backStack.isEmpty)
-                    .keyboardShortcut("[", modifiers: .command)
-                    .help("Go back")
-
-                    Button {
-                        navigateForward()
-                    } label: {
-                        Image(systemName: "chevron.forward")
-                    }
-                    .disabled(forwardStack.isEmpty)
-                    .keyboardShortcut("]", modifiers: .command)
-                    .help("Go forward")
-                }
-
-                if coordinator.hasDetectedChanges {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            onRescan()
-                        } label: {
-                            Label("Rescan", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .tint(.orange)
-                        .help("Files on disk have changed since this scan - click to rescan")
-                    }
-                }
-
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button {
-                        revealInFinder()
-                    } label: {
-                        Label("Reveal in Finder", systemImage: "folder")
-                    }
-                    .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
-                    .help("Reveal the selected item in Finder")
-
-                    Button {
-                        copyPath()
-                    } label: {
-                        Label("Copy Path", systemImage: "square.on.square")
-                    }
-                    .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
-                    .help("Copy the selected item's full path")
-
-                    Button(role: .destructive) {
-                        itemToDelete = selectedNode
-                        showDeleteAlert = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .disabled((selectedNode?.isSyntheticGroupingNode ?? false) || selectedNode.map { !FileOperations.canDelete(at: $0.path) } ?? true)
-                    .help("Move the selected item to the Trash, or delete it permanently")
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        ForEach(ColorTheme.allCases, id: \.self) { theme in
-                            Button {
-                                selectedTheme = theme
-                            } label: {
-                                HStack {
-                                    Text(theme.displayName).font(.control)
-                                    if theme == selectedTheme {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        Label(selectedTheme.displayName, systemImage: "paintpalette")
-                    }
-                    .help("Change color theme")
+                if exploreMode == .treemap {
+                    treemapToolbarContent
                 }
             }
         } else {
@@ -621,6 +556,143 @@ struct CleanupShellView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var exploreModeHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Mode", selection: $exploreMode) {
+                ForEach(ExploreMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 280)
+            .onChange(of: exploreMode) {
+                selectedTypeCategory = nil
+            }
+
+            Text("Your own files. Nothing here is recommended for deletion - anything you select joins the same review list as Cleanup.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    /// Unchanged from the old `MainContentView` - squarified treemap plus
+    /// file details.
+    private func treemapContent(root: FileNode) -> some View {
+        Group {
+            if let selectedNode, !selectedNode.isDirectory {
+                FileDetailsView(node: selectedNode, root: root)
+            } else {
+                GeometryReader { geometry in
+                    TreemapView(
+                        rects: treemapRects(geometry.size),
+                        onSelectNode: { node in
+                            if node.isDirectory {
+                                navigate(to: node)
+                            } else {
+                                selectedPath = node.path
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var treemapToolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button {
+                navigate(to: nil)
+            } label: {
+                Image(systemName: "arrow.up.to.line")
+            }
+            .disabled(coordinator.zoomNode == nil)
+            .help("Go to overview")
+        }
+
+        ToolbarItemGroup(placement: .navigation) {
+            Button {
+                navigateBack()
+            } label: {
+                Image(systemName: "chevron.backward")
+            }
+            .disabled(backStack.isEmpty)
+            .keyboardShortcut("[", modifiers: .command)
+            .help("Go back")
+
+            Button {
+                navigateForward()
+            } label: {
+                Image(systemName: "chevron.forward")
+            }
+            .disabled(forwardStack.isEmpty)
+            .keyboardShortcut("]", modifiers: .command)
+            .help("Go forward")
+        }
+
+        if coordinator.hasDetectedChanges {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    onRescan()
+                } label: {
+                    Label("Rescan", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .tint(.orange)
+                .help("Files on disk have changed since this scan - click to rescan")
+            }
+        }
+
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                revealInFinder()
+            } label: {
+                Label("Reveal in Finder", systemImage: "folder")
+            }
+            .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
+            .help("Reveal the selected item in Finder")
+
+            Button {
+                copyPath()
+            } label: {
+                Label("Copy Path", systemImage: "square.on.square")
+            }
+            .disabled(selectedNode == nil || (selectedNode?.isSyntheticGroupingNode ?? false))
+            .help("Copy the selected item's full path")
+
+            Button(role: .destructive) {
+                itemToDelete = selectedNode
+                showDeleteAlert = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .disabled((selectedNode?.isSyntheticGroupingNode ?? false) || selectedNode.map { !FileOperations.canDelete(at: $0.path) } ?? true)
+            .help("Move the selected item to the Trash, or delete it permanently")
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                ForEach(ColorTheme.allCases, id: \.self) { theme in
+                    Button {
+                        selectedTheme = theme
+                    } label: {
+                        HStack {
+                            Text(theme.displayName).font(.control)
+                            if theme == selectedTheme {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label(selectedTheme.displayName, systemImage: "paintpalette")
+            }
+            .help("Change color theme")
         }
     }
 

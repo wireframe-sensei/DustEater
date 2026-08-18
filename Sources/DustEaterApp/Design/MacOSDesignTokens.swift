@@ -161,6 +161,27 @@ enum CleanupMetrics {
     static let progressFillDuration: Double = 0.2
 }
 
+/// Geometry for Explore's Type board / Type detail / preview pane, per the
+/// design handoff's §4b/§4c. Kept separate from `CleanupMetrics` even
+/// though both are "card geometry with no `ControlMetrics` equivalent" -
+/// these describe a different screen's own surfaces (tiles, a fixed-width
+/// preview pane, table columns) and grouping them under the Cleanup name
+/// would misdescribe what they're for.
+enum ExploreMetrics {
+    static let tileMinHeight: CGFloat = 168
+    static let tileRadius: CGFloat = 14
+    static let tileIconSize: CGFloat = 34
+    static let tileIconRadius: CGFloat = 9
+    static let backButtonSize: CGFloat = 24
+    static let filterBarRadius: CGFloat = 10
+    static let rowRadius: CGFloat = 8
+    static let lastOpenedColumnWidth: CGFloat = 96
+    static let sizeColumnWidth: CGFloat = 88
+    static let previewPaneWidth: CGFloat = 268
+    static let previewPaneRadius: CGFloat = 12
+    static let previewThumbnailHeight: CGFloat = 168
+}
+
 extension Animation {
     /// The Scanning card's indeterminate ring rotation - `cubic-bezier(0.4,
     /// 0, 0.2, 1)` over `CleanupMetrics.scanningRingRotationDuration`,

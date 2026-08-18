@@ -11,12 +11,23 @@ struct ReviewView: View {
     private enum Destination { case trash, permanent }
     @State private var destination: Destination = .trash
 
-    private var groupedItems: [(id: CleanupFindingID, items: [CleanupItem])] {
-        let grouped = Dictionary(grouping: selection.items, by: \.findingID)
-        return CleanupFindingID.allCases.compactMap { id in
-            guard let items = grouped[id], !items.isEmpty else { return nil }
-            return (id, items.sorted { $0.sizeBytes > $1.sizeBytes })
+    /// Findings first (in their fixed order), then file types selected from
+    /// Explore - two different sources feeding one review list, per "do not
+    /// create a second, parallel delete path."
+    private var groupedItems: [(source: CleanupItemSource, items: [CleanupItem])] {
+        let grouped = Dictionary(grouping: selection.items, by: \.source)
+
+        let findingGroups: [(CleanupItemSource, [CleanupItem])] = CleanupFindingID.allCases.compactMap { id in
+            let source = CleanupItemSource.finding(id)
+            guard let items = grouped[source], !items.isEmpty else { return nil }
+            return (source, items.sorted { $0.sizeBytes > $1.sizeBytes })
         }
+        let fileTypeGroups: [(CleanupItemSource, [CleanupItem])] = FileTypeCategory.allCases.compactMap { category in
+            let source = CleanupItemSource.fileType(category)
+            guard let items = grouped[source], !items.isEmpty else { return nil }
+            return (source, items.sorted { $0.sizeBytes > $1.sizeBytes })
+        }
+        return findingGroups + fileTypeGroups
     }
 
     private var rebuildCommands: [String] {
@@ -32,8 +43,8 @@ struct ReviewView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     header
-                    ForEach(groupedItems, id: \.id) { group in
-                        groupSection(id: group.id, items: group.items)
+                    ForEach(groupedItems, id: \.source) { group in
+                        groupSection(source: group.source, items: group.items)
                     }
                     if !rebuildCommands.isEmpty {
                         rebuildCard
@@ -58,10 +69,10 @@ struct ReviewView: View {
         }
     }
 
-    private func groupSection(id: CleanupFindingID, items: [CleanupItem]) -> some View {
+    private func groupSection(source: CleanupItemSource, items: [CleanupItem]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(id.displayName.uppercased())
+                Text(source.reviewGroupTitle.uppercased())
                     .font(.system(size: 10, weight: .semibold))
                     .tracking(0.4)
                     .foregroundStyle(.tertiary)
@@ -75,7 +86,15 @@ struct ReviewView: View {
                 ForEach(items) { item in
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(item.name).font(.system(size: 13))
+                            HStack(spacing: 4) {
+                                Text(item.name).font(.system(size: 13))
+                                if item.isiCloudSynced {
+                                    Image(systemName: "icloud")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color(nsColor: .systemCyan))
+                                        .help("Stored in iCloud - deleting it removes it from every device.")
+                                }
+                            }
                             Text(item.detail)
                                 .font(.system(size: 11).monospaced())
                                 .foregroundStyle(.secondary)
