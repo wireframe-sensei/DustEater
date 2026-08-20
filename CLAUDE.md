@@ -745,23 +745,24 @@ oversights - don't "fix" these without the user asking:
   - **`CleanupCommitter.commit` is one shared batch-delete function**,
     replacing the three near-identical per-path delete loops that used to
     live in `DeveloperKitView.performPurge`, `DuplicatesView.performDelete`,
-    and `AppDetailInspector.proceedWithUninstall`. The first two callers no
-    longer exist; `AppDetailInspector` still has its own inline loop
-    (unchanged - App Manager wasn't touched by this restructure) and was
-    deliberately *not* migrated onto `CleanupCommitter`, since doing so
-    wasn't asked for and App Manager's uninstall has its own
-    running-app-termination flow this function doesn't replicate.
-  - **The Apps destination inside `CleanupShellView` embeds `AppManagerView`
-    unmodified, nesting its own `NavigationSplitView` inside the outer
-    shell's detail pane** rather than flattening App Manager's
-    mode-picker-plus-list sidebar into the shell's own sidebar. This reads
-    roughly like Mail.app's three-pane layout in practice. `AppManagerView`
-    was intentionally left untouched (row checkboxes and an uninstall
-    breakdown panel are the design's item 5, not built), so its "Home"
-    toolbar button still means exactly what its label says - back to
-    `DiskHomeView` - not back to Cleanup. Repurposing that button to mean
-    "back to Cleanup" without changing its label/icon would have been a
-    real, if small, honesty bug.
+    and `AppDetailInspector.proceedWithUninstall`. All three callers are now
+    gone: the first two no longer exist, and `AppDetailInspector`'s own
+    inline delete loop and running-app-termination flow were removed
+    outright once Apps (item 5, see below) moved uninstalling onto the same
+    checkbox-into-`SelectionStore`-into-`CleanupCommitter` path every other
+    deletable surface uses. There is no dedicated "quit and uninstall"
+    convenience for a running app any more - `CleanupCommitter.commit`'s
+    existing skip-with-error behavior for a running `blockingAppBundleID`
+    (already proven by the "unused applications" Cleanup finding) is what
+    Apps gets instead. A capability loss, not an oversight; see the Apps
+    item 5 entry below and `CHANGELOG.md`.
+  - **The Apps destination inside `CleanupShellView` no longer embeds
+    `AppManagerView`'s own `NavigationSplitView`/toolbar/Home button** - see
+    the Apps item 5 entry below for the full rewrite. The paragraph that
+    used to be here (App Manager left untouched, its own Home button
+    meaning exactly what it says) described a real interim state but is no
+    longer accurate now that item 5 is built; kept only as history in git,
+    not restated here.
   - **The persistent three-item sidebar (disk context block, Cleanup/
     Explore/Apps nav, contextual section, footer) is built from ordinary
     `NavigationSplitView` + native controls, not the design handoff's exact
@@ -1037,11 +1038,33 @@ oversights - don't "fix" these without the user asking:
     probe `ScanCoordinator` already uses to distinguish "doesn't exist"
     from "access denied" before a scan.** `AccessProbe.hasFullDiskAccess(
     checking:)` (Core, new) is a thin public wrapper around that
-    internal-to-the-module function, aimed at a fixed canary path
-    (`~/Library/Containers`) instead of whatever the user chose to scan -
-    the design handoff explicitly asks for this exact technique ("poll
-    readability of one known-protected path"). No new probing logic, no
-    widened visibility on `probeAccess` itself.
+    internal-to-the-module function, aimed at a fixed canary path instead
+    of whatever the user chose to scan - the design handoff explicitly
+    asks for this exact technique ("poll readability of one
+    known-protected path"). No new probing logic, no widened visibility on
+    `probeAccess` itself.
+  - **Real bug, caught after initial ship, not during it: the first canary
+    path (`~/Library/Containers`) was never actually gated by Full Disk
+    Access, so the step silently reported "granted" for every process
+    regardless of real TCC state.** `probeAccess` just does `open()` on
+    the path; `~/Library/Containers` is owned by the current user
+    (`drwx------`), so plain Unix permissions let any process the user
+    runs open and list it - TCC only protects *reading files inside*
+    another app's container, never the top-level directory listing.
+    Confirmed live, not reasoned about in the abstract: from the same
+    ungranted process, `dd` against `/Library/Application Support/
+    com.apple.TCC/TCC.db` failed with "Operation not permitted" while
+    `ls ~/Library/Containers` exited 0. Fixed by pointing
+    `AccessProbe.defaultProtectedPath` at that TCC database file instead -
+    root-owned, permissions that genuinely require FDA to read, and it's
+    literally the table FDA grants live in, which is why it's the standard
+    technique real-world FDA-detection code uses. Re-verified live after
+    the fix: forcing the polling loop active without ever touching System
+    Settings now correctly stays on "Waiting for access" indefinitely
+    instead of flipping to "granted" within a second. The four skipped-
+    location rows on the Limited-access card (below) were never affected -
+    those list real paths the scanner itself can't read without FDA, a
+    separate fact from the canary used to detect FDA at all.
   - **`OnboardingStore.hasCompletedOnboarding` gates the welcome flow, and
     is deliberately *not* the thing that decides whether the Limited-access
     card shows.** Onboarding is a once-per-install flag (has the user ever
@@ -1214,3 +1237,496 @@ oversights - don't "fix" these without the user asking:
     behave strangely (high CPU, a slow first check) on this specific
     machine - it is very unlikely to reproduce on a real user's Mac, and no
     code changed in response to it.
+- **Home / "choose what to scan" (item 11 of the design handoff, a
+  reversal of the original item-1 auto-skip decision) -
+  `Sources/DustEaterApp/DiskHomeView.swift`,
+  `Sources/DustEaterApp/Home/HomeMemory.swift`:** safety rule 13 - a scan
+  is never started for the user, and the expected duration is stated
+  before it begins. Home is now shown on every launch, regardless of
+  volume count; the single-volume auto-skip shipped with items 1-4 was
+  reversed on 18 Aug once it was clear a full-disk scan can run well past
+  two minutes, and a wait the user never chose reads as a hang rather than
+  thoroughness.
+  - **What survived the rewrite and what didn't.** `DiskHomeView.swift`
+    predates the HIG design-system migration entirely - `largeTitle`/
+    `.ultraThinMaterial` glass panels everywhere, a `Color(nsColor:
+    .windowBackgroundColor)` ZStack background, none of it matching the
+    flat-content-area/`opaqueTertiaryFill`-card language every other
+    redesigned screen (Welcome, Cleanup, Review, Receipt) already uses. The
+    volume-loading logic survived (mount/unmount reactivity, the 5-second
+    poll, the system-volume filter) since it's presentation-agnostic; every
+    view (the header panel, `DiskCardView`, `CustomFolderCardView`,
+    `AppManagerCardView`) was replaced outright rather than restyled in
+    place, because the new layout (a single 600pt centred column, card-as-
+    button with no separate selection step) isn't a styling pass over the
+    old grid-of-cards, it's a structurally different screen.
+  - **Two real capabilities were cut, not just restyled, because the new
+    Home spec enumerates its own contents completely and neither appears
+    in it.** `AppManagerCardView` (a direct Home-to-App-Manager tile) and
+    the old `PurgeableSpaceSection`/`ReclaimConfirmationSheet` "Reclaim
+    Purgeable Space Now" flow are deleted outright - both had become
+    unreachable dead code the moment `DiskHomeView` stopped calling them,
+    confirmed via grep before deleting rather than assumed. App Manager
+    stays fully reachable via `CleanupShellView`'s sidebar (available the
+    moment any scan starts, per its own already-documented "Apps... stays
+    available throughout"), so this costs one extra click, not the
+    capability. The purgeable-reclaim UI has no replacement anywhere in the
+    app right now - `DiskTelemetryService.reclaimPurgeableSpace` and
+    `PurgeableSpaceReclaimer` stay in Core untouched (same treatment
+    `PurgeCatalog`'s un-surfaced categories already get), but there is
+    currently no UI path to trigger a reclaim. Revisit if a manual reclaim
+    affordance turns out to matter somewhere in the new flow - Welcome step
+    3 and the sidebar both explain purgeable space, but neither offers to
+    act on it.
+  - **A real, independent bug found and fixed while building this:
+    `CleanupShellView`'s `@State private var cleanupStage = .scanning`
+    hardcoded default was already wrong before this task**, not something
+    Home's reversal introduced - `reviewFromMenuBar`'s `screen = .scanFlow`
+    branch (when `coordinator.state` is already `.finished`) could already
+    reach it. Every prior path into `.scanFlow` happened to set `screen`
+    and start a fresh `.scanning` state in the same call
+    (`startScan`/`chooseFolder`), so the mismatch was never observable
+    until Home's "View Results" made "navigate to `.scanFlow` while
+    `coordinator.state` is already `.finished`" a real, common path.
+    `.onChange(of: coordinator.state)` can't fix this alone - it only
+    fires on a *subsequent* change, not the state a freshly-created view
+    already inherits. Fixed with a custom `init` that reads
+    `coordinator.state` once at creation time and seeds `cleanupStage`
+    accordingly. Verified live: "View Results" now lands directly on
+    Cleanup's findings with the original scan duration shown (no rescan
+    triggered), not a stuck fake "still scanning" screen.
+  - **`HomeMemory` is one path-keyed store, JSON-encoded into
+    `UserDefaults`, serving two visually different things** - the volume
+    cards' estimate row ("known from a previous scan") and the folder-scan
+    card's recent-folder pills - because both are really the same fact
+    ("what did scanning this path cost last time"), and which list a path
+    shows up in is a read-time filter (does it match a currently mounted
+    volume root), not a stored property. Recorded from one place,
+    `ContentView`'s `.onChange(of: coordinator.state)`, so a scan started
+    from the menu bar (`rescanFromMenuBar`) gets the same bookkeeping as
+    one started from Home, with no special-casing per entry point.
+  - **Recent-folder pills are all-real or all-bare, never mixed.** The
+    design handoff's own framing ("on a first run there are no recents, so
+    the row shows `~/Downloads`, `~/Desktop` and `~/Documents` bare") reads
+    as a first-run-specific fallback, not a permanent filler alongside real
+    recents - so `FolderScanCardView` shows the three bare defaults only
+    when `HomeMemory.recentFolders` is completely empty, and switches to
+    real recents-only (most-recent-first, capped at 3) the moment any
+    exist. Confirmed live across both states.
+  - **The estimate row's minute range is a deliberately calibrated guess,
+    not a measured constant** - macOS gives no cheap file count, so both
+    the known-item-count and first-run cases extrapolate from a throughput
+    assumption. The two throughput constants (`fastItemsPerMinute` /
+    `slowItemsPerMinute` in `DiskHomeView.swift`'s `ScanEstimate`) were
+    picked specifically so a 10.2M-item disk - the design handoff's own
+    worked example - lands on exactly "2-4 minutes"; the first-run
+    items-per-used-GB constant is a similarly coarse stand-in. Recorded
+    here, not just in a code comment, so a future session recalibrating
+    against real benchmark data knows why these particular numbers were
+    chosen rather than assuming they're arbitrary.
+  - **Volume kind detection needed one small, deliberately narrow Core
+    addition** - `DiskTelemetryService.interconnectKind(atPath:)` (new),
+    wrapping the same `PhysicalDiskResolver`/`IORegistryDiskReader` round
+    trip `gatherDiskHealth()` already makes per volume, rather than
+    widening either of those two internal-to-Core types to `public`. The
+    filesystem name half of the kind label (`Internal · APFS`) doesn't need
+    Core at all - `URLResourceKey.volumeLocalizedFormatDescriptionKey` is
+    plain Foundation, already available wherever `loadDisks()` was already
+    calling `url.resourceValues(forKeys:)`.
+  - **`TopLevelScreen.appManager` (`ContentView`'s old direct-to-App-
+    Manager top-level case) was deleted, not left dormant** - once Home's
+    tile pointing to it was removed, nothing set `screen = .appManager`
+    anywhere, confirmed via grep before deleting. `CleanupShellView`'s own
+    `Destination.apps` still routes to Apps the same way it always has,
+    though what it constructs there changed substantially - see the Apps
+    item 5 entry below.
+  - **Welcome step 3's button reads "Continue" unconditionally now**, not
+    "Start Scan" on the last step - onboarding hands off to Home
+    regardless of which step it ends on; choosing the actual scan target
+    is Home's job now, never onboarding's.
+- **Apps screen rebuild and item 5 "Apps" of the design handoff, finally
+  built (`Sources/DustEaterApp/AppManager/AppManagerView.swift`,
+  `AppDetailInspector.swift`, `Sources/DustEaterCore/Cleanup/
+  CleanupFinding.swift`, `CleanupFindingsBuilder.swift`,
+  `Sources/DustEaterCore/AppManagerScanner.swift`):** item 5 was never
+  assigned or built in any prior session - confirmed via grep (zero hits
+  for `SelectionStore` in the old `AppManagerView.swift`) before starting,
+  not assumed. The old screen also had a real, unrelated layout bug: its
+  own nested `NavigationSplitView` (with its own toolbar and Home button)
+  inside the shell's detail pane, and a native SwiftUI `List` whose rows
+  wrapped app names onto two or three lines at the list's actual runtime
+  width. Both are fixed as part of building item 5, not as separate work.
+  - **The nested-panel bug's fix is structural, not stylistic**:
+    `AppManagerView`'s own `NavigationSplitView`/toolbar/Home button are
+    gone outright, replaced with a plain `HStack(spacing: 0)` (list column,
+    `Divider()`, detail column) that renders directly inside
+    `CleanupShellView`'s one real toolbar/window, matching how Cleanup and
+    Explore already work. An inline, non-toolbar Rescan button is kept
+    (plain content, not toolbar chrome, so it doesn't reintroduce "a second
+    toolbar"); the screen has no Home button of its own any more, matching
+    Cleanup/Explore, which don't have one either.
+  - **The row-wrapping bug's fix is also structural**: rows are now a
+    hand-rolled `ScrollView` + `LazyVStack` (`AppRowView`), the same
+    pattern already proven in Explore's `TypeDetailView.TypeFileRow`, not a
+    native `List`. A native `List`'s row height and text-wrapping behavior
+    fights explicit `.lineLimit(1)`/fixed-height constraints in exactly the
+    way CLAUDE.md's own `TypeDetailView` Picker-height entry above already
+    documents for a different control - reached for the same known-working
+    escape hatch instead of re-debugging the same class of SwiftUI-List
+    quirk twice. Row height is a fixed 24pt; the name label is
+    `.lineLimit(1)` with `.truncationMode(.tail)`. The list header
+    (NAME/LAST OPENED/SIZE) stays outside the `ScrollView`, and the
+    `ScrollView` itself carries `.scrollEdgeEffect(.hard, for: .top)` so
+    content clips at the header instead of scrolling under it.
+  - **`EdgeEffectStyle`/`View.scrollEdgeEffect(_:for:)`
+    (`Design/MacOSDesignTokens.swift`) wraps a real, macOS-26-only SwiftUI
+    API (`scrollEdgeEffectStyle(_:for:)`), verified by reading the actual
+    `SwiftUI.swiftinterface` in this machine's installed SDK directly
+    rather than guessed** - both the modifier and the `ScrollEdgeEffectStyle`
+    struct itself are `@available(macOS 26.0, *)`, so this needed the full
+    `#if compiler(>=6.2)` + `#available` guard CLAUDE.md's SDK/toolchain
+    gotcha (above) already documents for `.glassEffect`, including
+    wrapping the type name itself, not just the call site - falls back to
+    plain `self` (a hard divider look, effectively) below macOS 26 or on
+    an older SDK. This is the second API to need this exact guard pattern;
+    if a third shows up, that's the trigger to promote the guard shape
+    itself into a documented helper rather than copying it a third time.
+  - **List column minimum width is 320pt, and the detail column is a fixed
+    320pt** (`AppManagerView.swift`), so list is always the larger of the
+    two regardless of window width - verified live at both a
+    system-enforced minimum window width (macOS itself refused to shrink
+    below roughly 1000pt total once the sidebar's and both content
+    columns' minimums summed up) and a wide window (detail stayed a small
+    fraction of the width). At the enforced minimum, names still truncate
+    with a tail ellipsis rather than wrapping.
+  - **Rows gain a checkbox wired to the shared `SelectionStore` -
+    `AppRowItem.makeCleanupItem()` dispatches to two new Core overloads,
+    `CleanupFindingsBuilder.appCleanupItem(for: AppDiskEntity, source:)`
+    and `appCleanupItem(for: OrphanedAppData, source:)`.** A new
+    `CleanupItemSource.app` case (one case regardless of which of the
+    three modes - Installed, Unused, Developer Tools - the row came from,
+    since Review shows one "Apps" group, not three) drives
+    `ReviewView.groupedItems`' new app group and `reviewGroupTitle`. The
+    Installed-mode helper is the same one `CleanupFindingsBuilder.
+    unusedApplications` (the existing Cleanup finding) now calls too -
+    extracted because it had exactly two real call sites doing identical
+    construction, per CLAUDE.md's Rule of Three above, not speculatively.
+    Selecting the same app from Cleanup's "unused applications" finding
+    and from Apps' Installed row converge on the same `SelectionStore`
+    entry, since both construct a `CleanupItem` with the same
+    `id: entity.id` - deliberate and desirable, not an edge case to guard
+    against, since it's genuinely the same underlying uninstall either way.
+  - **"Orphaned" mode was renamed to "Unused" as a pure label change on
+    the same underlying `orphaned: [OrphanedAppData]` data, not a new
+    filtering concept** - confirmed against the user's own explicit
+    wording ("the screenshot shows Orphaned - rename it to Unused") rather
+    than inferring a semantic split between "unused" and "orphaned" that
+    was never asked for.
+  - **The detail pane (`AppDetailInspector`) is now purely read-only** - no
+    selection state, no confirmation sheet, no delete button, not even a
+    per-row "quit and uninstall" flow for a running app. It answers "what
+    would deleting this remove" (application bundle, then each
+    `RelatedStorageItem` - Application Support, Caches, Containers, Saved
+    State, Preferences - with its own path/size and a Reveal-in-Finder
+    button); the *decision* to delete is made entirely by the row
+    checkbox, and the actual delete happens from Review, same as every
+    other surface. This mirrors Explore's established "focus and select
+    are separate concerns, and the preview pane doesn't duplicate the
+    selection affordance" pattern (`TypeFilePreviewPane`).
+  - **The design handoff's copy says the breakdown covers "caches,
+    application support, preferences and logs" - there is no "logs"
+    category in `RelatedStorageCategory` (only Application Support,
+    Caches, Containers, Saved State, Preferences), and none was added.**
+    Real `~/Library/Logs` discovery would be new Core scanning work, out of
+    scope for a screen-layer task; the breakdown shows the five categories
+    the scanner actually finds today, under their real labels, rather than
+    inventing a "Logs" row with no data behind it.
+  - **`SelectionTray` is now shown for all three destinations (Cleanup,
+    Explore, Apps), not just Cleanup's findings screen** - a real gap found
+    while testing this task, not something asked for directly. The tray
+    was written once (Cleanup restructure) and only ever mounted inside
+    `cleanupDetail`'s `.findings` case; Explore's `TypeDetailView` already
+    had the same gap (checking a file-type item into `SelectionStore` gave
+    no visible way to reach Review without manually switching to Cleanup).
+    Apps' new checkboxes would have shipped into that exact same hole.
+    Fixed by hoisting the tray one level up, into a `ZStack` wrapping
+    `CleanupShellView`'s whole `detail:` content, gated on
+    `shouldShowSelectionTray` (selection non-empty, and not already on
+    Review or the Receipt, where a second "N selected, Review" affordance
+    would be redundant) - not an Apps-specific patch, since the underlying
+    invariant ("selection is app-wide") is the same regardless of which
+    destination added an item to it.
+  - **Capability losses, disclosed in `CHANGELOG.md`**: no more in-Apps
+    confirmation-sheet uninstall flow (`AppUninstallSelection.swift`,
+    `UninstallConfirmationSheet.swift`, deleted - confirmed via grep that
+    nothing else referenced them before deleting); no more "Select All"
+    checkbox scoped to just the app list (superseded by the shared
+    `FindingGroupView`-style group checkbox pattern once Apps' selection
+    lives in Review); no more per-row "quit and uninstall" convenience for
+    a running app (see the `CleanupCommitter.commit` entry above); no more
+    in-panel Settings/Home shortcut buttons (the standard Cmd-, and the
+    shell's own lack of a Home button, respectively, are what's left).
+- **Explore's type totals were already accumulator-based, not
+  capped-list-based - the real bug was a different instance of "a folder
+  is the natural unit, not its files" (`Sources/DustEaterCore/Explore/
+  FileTypeIndex.swift`, `Scanner/DiskScanner.swift`,
+  `DependencyDirectoryCatalog.swift`, `Explore/
+  DependencyDirectoryBrowser.swift`, `Sources/DustEaterApp/Explore/
+  CodeProjectsDetailView.swift`):** a user reported Code & Projects'
+  header reading a few GB while the sidebar treemap showed ~22 GB for the
+  same folder, and asked to fix the total to come from the type-index
+  accumulator instead of the display-capped entries list. Both
+  `TypeBoardView`'s tile and `TypeDetailView`'s header already read
+  `FileTypeIndex.total(for:)` (the true, uncapped accumulator built in
+  `FileTypeIndexPartial.record`/`merge`), confirmed by instrumenting
+  `dustbench` temporarily to print accumulator-vs-capped-sum per category
+  against a real ~22 GB `node_modules`-heavy folder - the two numbers
+  measurably differed (accumulator caught real data the cap dropped), so
+  the code paths are genuinely distinct and the header used the correct
+  one already. The real defect was upstream: `DiskScanner`'s type index
+  classified every file *inside* `node_modules` individually by extension
+  (a `.js` file here, a `.png` icon there), so a category's total was
+  never wrong exactly, but Code & Projects was answering "how many bytes
+  have a code-looking extension" instead of "how much does this project's
+  dependency tree cost" - the two only coincide when there's no dependency
+  tree. On the test folder this meant `Code & Projects` read ~270 MB while
+  ~18.7 GB of the same folder's real weight silently sat in `Other`
+  (`.node` binaries, `.wasm`, sourcemaps, lockfiles - none of which
+  `FileTypeClassifier`'s extension list recognizes as code).
+  - **Fix: `DiskScanner` now aggregates a recognized dependency/build
+    directory (`node_modules`, `.next`, `dist`, `build`, `target`,
+    `.venv`/`venv`, `Pods`, `DerivedData`) into exactly one
+    `.codeAndProjects` `FileTypeIndexEntry` per directory, carrying the
+    directory's full recursive size** - the same shape `.app` bundles
+    already used (one `.applications` entry per bundle, individual
+    contents never separately classified), just generalized. On the same
+    test folder this moved `Code & Projects` from ~270 MB/13,653 files to
+    ~22 GB/331 files - matching the treemap - and `Other` dropped by a
+    corresponding ~18.7 GB. This is a real, verified fix to the
+    "audit every type for the same mistake" instruction, not the literal
+    "read the accumulator instead of the cap" bug as first described -
+    the accumulator was never the bug; what it accumulated was.
+  - **Directory names are matched unguarded (no sibling-file check),
+    unlike `PurgeCatalog.discoveredDefinition`'s real, deletable Developer
+    Kit targets, which keep their existing sibling guards (`Cargo.toml`
+    for `target`, `Package.swift` for `.build`, `Podfile` for `Pods`,
+    `requirements.txt`/`pyproject.toml` for `.venv`/`venv`,
+    `package.json` for `.next`/`dist`/`build`, an `.xcodeproj`/
+    `.xcworkspace` sibling for `DerivedData`) exactly as before.** A
+    mislabeled Explore browse row (a folder named literally "build" that
+    isn't a build directory) costs nothing - it's report-only, never
+    deletable - so the precision Developer Kit needs before it deletes
+    anything doesn't apply to a classification-only decision. Both
+    consumers pull their name list and editorial copy (title, one-line
+    detail, rebuild command) from one new shared table,
+    `DependencyDirectoryCatalog.editorialInfo(forName:)` - `PurgeCatalog.
+    discoveredDefinition` layers its own sibling check on top of it before
+    constructing a real `PurgeTargetDefinition`; `DiskScanner` calls it
+    directly, unguarded. This is the "reuse Developer Kit's per-project
+    grouping, don't build a second mechanism" instruction, applied at the
+    level that was actually reusable - the *editorial knowledge* (what
+    `node_modules` is, what rebuilds it), not `PurgeCatalog.discover(in:)`
+    itself, which needs the fully-assembled tree and re-derives sibling
+    context Explore's Code & Projects screen doesn't need and would have
+    duplicated a second, redundant tree walk to get.
+  - **`.next`/`dist`/`build`/`DerivedData` are new `PurgeCatalog.
+    discoveredDefinition` cases too, not just `DiskScanner`-side additions**
+    - even though nothing in Cleanup's UI reads `.projectArtifacts`
+    targets today (confirmed by grep: `CleanupFindingsBuilder.
+    xcodeBuildArtifacts`/`packageManagerCaches` only ever read `.xcode`/
+    `.packageManagers`), leaving Developer Kit's own catalog unaware of
+    four directory names `DiskScanner` now recognizes would have made the
+    two lists silently diverge the moment either grows a real consumer.
+  - **A real, independent bug found and fixed while building this, not
+    asked for**: the first version tracked "inside a `.app` bundle,"
+    "inside a dependency directory," and "inside a protected bundle" as
+    three independent `Bool` parameters threaded through `DiskScanner`'s
+    recursion. A `.framework` sitting inside a `.app` bundle - the routine
+    case, most frameworks ship inside the app that uses them - set
+    `insideAppBundle` but not `insideProtectedBundle`, so it was correctly
+    folded into the app's `.applications` total *and* incorrectly recorded
+    a second time as its own `.other` entry, double-counting its bytes and
+    showing a confusing duplicate locked row in Explore. Caught live, not
+    by reasoning about the code - a real scan surfaced "Google Chrome for
+    Testing Framework.framework" as its own top `Other` row despite
+    already being inside a `.app`. Fixed by collapsing all three flags
+    into one `insideAggregatedContainer: Bool` - once inside any
+    recognized container, of any kind, nothing nested inside it, of any
+    kind, starts a new aggregation; only the outermost container ever
+    records an entry. Regression test:
+    `protectedBundleNestedInsideAppBundleIsNotDoubleRecorded` in
+    `DiskScannerTests.swift`.
+  - **Creative-suite libraries and app-adjacent bundles
+    (`.fcpbundle`/`.imovielibrary`/`.theater`/`.tvlibrary` →
+    `.videos`; `.logicx`/`.band` → `.audio`; `.framework`/`.bundle`/
+    `.xpc`/`.plugin`/`.appex`/`.sparsebundle` → `.other`) get the same
+    aggregation, reusing `BundleProtection`'s existing suffix list rather
+    than inventing a second one** - found during the "audit the other
+    seven types" pass: `BundleProtection` already refuses to treat these
+    as individually inspectable duplicate/large-file candidates elsewhere
+    in the app, for the same underlying reason (deleting one file out of a
+    Final Cut library can corrupt the whole library), but `DiskScanner`'s
+    type index had no equivalent exclusion, so a Final Cut Pro library's
+    internal render files scattered across `.videos` individually.
+    `.photoslibrary` is deliberately excluded from this new aggregation
+    (unlike `BundleProtection`'s own broader list) - Photos' individual
+    originals are meant to stay individually browsable, just locked
+    (`isPhotosManaged`), which is a real, different, already-shipped
+    design choice this didn't touch. These rows get no dedicated UI
+    (unlike Code & Projects' folder rows) - they render as one ordinary,
+    locked row (`FileTypeIndexEntry.isProtectedBundle`, mirroring
+    `isPhotosManaged`'s existing lock-instead-of-checkbox treatment,
+    reusing `CleanupItem.reportOnly`) in whichever category's normal file
+    list they land in, since unlike a dependency tree there's no rebuild
+    command to show - the correct hint is "open it in the app that made
+    it," not a shell command.
+  - **`FileTypeBrowser.detail(for:)` needed a real fix alongside this, not
+    just a new flag: it previously always `lstat`'d `entry.path` to get a
+    "logical size."** For a protected-bundle or dependency-directory
+    aggregate entry, `entry.path` is a *directory* - `lstat`ing it returns
+    the directory inode's own trivial size, not the recursive total
+    `DiskScanner` already computed into `sizeBytes`. Undetected until now
+    because `.applications` (the only prior directory-shaped entry) never
+    reaches this code path at all (`TypeBoardView.onSelectType` routes
+    `.applications` straight to App Manager - see the existing "Applications
+    never drills into a Type detail screen" entry above). Fixed by using
+    `entry.sizeBytes` directly for `isProtectedBundle` entries instead of
+    re-deriving a "logical size" that doesn't mean anything at the folder
+    level; `isDependencyDirectory` entries never reach this function at
+    all, since `CodeProjectsDetailView` filters them out before calling
+    `FileTypeBrowser.loadDetails` (its own `DependencyDirectoryBrowser`
+    handles those, using `entry.sizeBytes` the same way from the start).
+  - **Code & Projects gets its own detail screen
+    (`CodeProjectsDetailView`), not a reused, branching `TypeDetailView`**
+    - the two are structurally different enough (a folders-then-files
+    two-section list with no size/age filter bar, versus a flat filtered
+    file list) that threading the difference through one view via a
+    `category == .codeAndProjects` branch would have needed nearly as many
+    conditionals as a second file. `CleanupShellView.exploreDetail` routes
+    to it the same way `TypeBoardView.onSelectType` already special-cases
+    `.applications`.
+  - **`DependencyDirectoryBrowser.loadDetails` is a plain sequential loop
+    over the (at most a few dozen) folder entries, not the bounded
+    concurrency window `FileTypeBrowser.loadDetails` uses for up to 2000
+    files** - a scan realistically finds dozens of dependency directories,
+    never thousands, so the concurrency machinery would cost complexity
+    for no measurable benefit. This is the fourth similar-but-distinct
+    bounded-or-not concurrency shape in the codebase now
+    (`DuplicateDetector.withConcurrentTasks`, `PurgeScanner.measure`,
+    `FileTypeBrowser.loadDetails`, this one) and deliberately still isn't
+    unified - same reasoning as the third: different scales, coincidental
+    overlap, not proven duplication.
+  - **The header's item count changed from "N files" to "N items" only on
+    `CodeProjectsDetailView`, not the other seven categories' shared
+    `TypeDetailView` header** - once a "file" can mean a whole aggregated
+    dependency folder, "files" stops being accurate for this one screen
+    specifically; the other categories' `total.fileCount` still counts
+    real individual files (aside from the pre-existing `.applications`
+    bundle-counts-as-one wording imprecision, which this task didn't
+    touch).
+- **Code & Projects, round two: "shallow" folder sizes turned out to be
+  correct, and the real fix was regrouping by project
+  (`Sources/DustEaterCore/Explore/ProjectDetector.swift`,
+  `DependencyDirectoryBrowser.swift`, `Sources/DustEaterApp/Explore/
+  CodeProjectsDetailView.swift`):** a user reported the largest
+  `node_modules` row reading 36 KB inside a 27 GB category and asked to
+  fix folder rows to carry "full recursive size... from the same
+  accumulator the treemap uses." Investigated by running real `du -sh`
+  against the exact reported folders before changing anything. The 36 KB
+  was **correct** - `du -sh packages/ui/node_modules` on the real
+  directory returns 36K too, because in a pnpm monorepo only the
+  workspace root's `node_modules` holds real package contents; every
+  other package's own `node_modules` is a handful of symlinks back into
+  the root's `.pnpm` store, and `DiskScanner` correctly never traverses
+  symlinks (`for entry in entries where !entry.isSymlink`, same guard
+  that prevents double-counting and infinite loops elsewhere). There was
+  no accumulator-vs-cap bug this time - `DependencyDirectoryBrowser`
+  already used `entry.sizeBytes` directly, which *is* what the
+  accumulator sums. The actual defect was the row unit: a package-local
+  `node_modules` is real but answers the wrong question - a developer
+  doesn't reason about "the ui package's node_modules," they reason about
+  "gdp-portal." Confirmed by cross-checking the fix against `du -sh` on
+  four different real project directories after building it
+  (omnisearch-local, gdp-portal, DustEater, ksr-group-website all matched
+  the UI to within rounding), not just asserted.
+  - **Rows are now projects, not dependency directories.**
+    `ProjectDetector.projectRoot(forDirectoryContaining:in:)` walks from
+    the scan root *down* toward a dependency directory's parent, checking
+    each ancestor for `.git`, a top-level `package.json`/`Cargo.toml`/
+    `go.mod`/`Package.swift`/`pyproject.toml`, or a `*.xcodeproj` child,
+    and returns the **outermost** match - the walk starts at the root and
+    stops at the first hit, so a monorepo's own `.git` always wins over
+    any individual package's nested `package.json`. Entirely in-memory
+    against the already-scanned tree, the same "no second walk, no second
+    permission prompt, sizes come straight off the nodes" reasoning
+    `PurgeCatalog.discover` already documents. A dependency directory
+    whose ancestors carry no marker at all falls back to its own
+    immediate parent as a singleton project, rather than silently
+    vanishing from the list.
+  - **A project row's total size is `root.node(atPath: projectRoot.path)?.size`
+    - the same scanned `FileNode` the sidebar treemap renders from - not a
+    sum of its dependency-directory children.** This is deliberate and is
+    what makes the "cross-check against the treemap" requirement
+    trivially true by construction rather than something that has to stay
+    in sync: both numbers are reads of the identical tree node. It also
+    means a project's total honestly includes its source files and
+    anything else inside it, not just what's reclaimable - the secondary
+    line (`ProjectSummary.reclaimableSummary`, e.g. "2.8 GB in 4
+    node_modules - rebuild with npm install") is the sum of just the
+    dependency-directory children, a real, separate, smaller number by
+    design.
+  - **This makes a project's total size legitimately overlap with other
+    type categories' totals for files inside that project directory that
+    aren't code-extension files (a video, an image) - accepted, not
+    fixed.** `Code & Projects`' header byte total deliberately did *not*
+    change to "sum of project totals" for exactly this reason (it would
+    double-count against `.videos`/`.photos`/etc at the aggregate-total
+    level, reopening the "numbers don't agree" problem this whole feature
+    exists to close) - only the header's *item count* changed, to
+    `projects.count + looseFiles.count` per the explicit instruction that
+    it "should count what the list actually shows." The header's byte
+    figure stays `index.total(for: .codeAndProjects).totalBytes`, matching
+    `TypeBoardView`'s tile exactly, as before. A project *row's* total, by
+    contrast, must be the true full folder size for the treemap
+    cross-check to mean anything - two different numbers serving two
+    different, both legitimate, claims ("how much has DustEater
+    classified as code-related, total" vs. "how big is this specific
+    folder").
+  - **A loose file that's part of a detected project but not inside one
+    of its dependency directories (an ordinary source file) is not
+    itemized anywhere - not as a project child, not in the flat Files
+    list.** It's part of the project's total size the same way any
+    Finder folder's size includes files you aren't looking at
+    individually. Only files outside every detected project remain in
+    the flat list, filtered by path prefix against every project's
+    `rootPath`.
+  - **`DependencyDirectoryDetail` dropped its `projectPath` field** from
+    the previous round - redundant once a child is always rendered nested
+    inside its owning `ProjectRowView`, where the project's own path is
+    already shown once in the parent header rather than repeated on every
+    child.
+  - **`ProjectBrowser.loadProjectSummaries` groups synchronously first,
+    then does exactly one last-used-date lookup per *project* plus one
+    per dependency directory** - not one per file, not one per candidate
+    ancestor checked during detection (that part is pure, synchronous,
+    zero I/O, since marker checks only read already-in-memory `FileNode.
+    children`). Bounded the same way `DependencyDirectoryBrowser.
+    loadDetails` already was (dozens of projects and dependency
+    directories in practice, never thousands), so it stays a plain
+    sequential loop, not the bounded-concurrency window
+    `FileTypeBrowser.loadDetails` needs for up to 2000 files.
+- **The sidebar's Cleanup/Explore/Apps nav row (`CleanupShellView.navRow`)
+  only responded to clicks on the icon/text, not the rest of the visibly
+  highlighted row** - a real, reported bug, not a hypothetical. The
+  `Button`'s label had a `.background(...)` that visually filled the row
+  (via the `Spacer()` inside its `HStack`) but no `.contentShape(Rectangle())`,
+  so SwiftUI's hit-testing only covered the rendered glyph bounds, not the
+  painted background - a background making something *look* tappable
+  doesn't make it tappable. Fixed with `.frame(maxWidth: .infinity,
+  alignment: .leading)` (so the label's layout bounds genuinely span the
+  row, not just its painted background) plus `.contentShape(Rectangle())`.
+  Verified with real coordinate clicks on empty space, not
+  `System Events`' `click <element>` (which calls the button's action via
+  accessibility directly, bypassing real hit-testing entirely and would
+  have masked this exact bug - which is why it wasn't caught during this
+  screen's own earlier testing).

@@ -2,7 +2,114 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.0.0] - 2026-08-20
+
+### Fixed
+- **The Cleanup / Explore / Apps sidebar rows only responded to clicks
+  directly on their icon or label** - the empty space around them, despite
+  looking like part of the same clickable row, did nothing
+- **Explore's Code & Projects total and file list were both quietly wrong
+  in the same way**: a dependency tree's own files (a `.js` file deep
+  inside `node_modules`, a stray icon it ships) were each individually
+  classified by extension, so a project's true weight scattered across
+  Code & Projects, Other, Photos, and more instead of counting toward the
+  project. On a real ~22 GB `node_modules`-heavy folder this meant Code &
+  Projects read as little as 270 MB. `node_modules`, `.next`, `dist`,
+  `build`, `target`, `.venv`/`venv`, `Pods`, and `DerivedData` are now
+  each counted as one folder with its real, full size
+- **A Final Cut Pro/Logic Pro/GarageBand library, or a `.framework`/
+  `.bundle`/`.xpc`/`.plugin`/`.appex`/`.sparsebundle` package, no longer
+  scatters its internal files across Videos/Audio/Other individually** -
+  the same fix as above, applied to every category, not just Code &
+  Projects
+- A `.framework` bundled inside a `.app` (the routine case) could be
+  double-counted - folded correctly into the app's own total, then
+  counted a second time as its own entry elsewhere
+
+### Changed
+- **Code & Projects lists projects, not dependency folders and not
+  individual files.** A `.git` repository, or a directory rooted by a
+  top-level `package.json`/`Cargo.toml`/`go.mod`/`Package.swift`/
+  `pyproject.toml`/`*.xcodeproj`, is one row - its name, its path, its
+  real total size (matching the sidebar treemap for that folder exactly),
+  when it was last opened, and a summary of what's reclaimable inside it
+  ("2.8 GB in 4 node_modules - rebuild with npm install"). A monorepo with
+  a `node_modules` per package is one row, not one per package. Expanding
+  a project shows its `node_modules`/`.next`/`dist`/`build`/`target`/
+  `.venv`/`Pods`/`DerivedData` folders individually - still locked, still
+  showing the exact rebuild command (`npm install`, `cargo build`, and so
+  on - the same hints Cleanup's Developer Kit already used), never
+  selectable, since the correct action is the rebuild command, not a
+  Trash move. A loose file that isn't part of any detected project - a
+  stray 400 MB CSV, a standalone script - still lists individually below
+
+### Added
+- **Apps**: the app list column now lives directly in the main window,
+  under checkboxes wired to the same selection tray and Review screen
+  every other Cleanup surface uses - uninstalling an app is no longer a
+  separate delete path with its own confirmation sheet
+  - Selecting the same app from here or from Cleanup's "unused
+    applications" finding is the same selection either way
+  - "Orphaned" is renamed to "Unused"
+  - The detail pane is now a full breakdown of what an uninstall would
+    remove - the application bundle, then each related item (caches,
+    application support, containers, saved state, preferences) with its
+    own path, size, and a Reveal in Finder button
+  - Nothing is pre-selected
+
+### Fixed
+- **Apps**: the app list was rendered as its own floating panel with a
+  second toolbar and Home button nested inside the main window, and app
+  names could wrap onto two or three lines at the list's actual width.
+  Both are fixed - the list now sits directly in the shared content area,
+  and rows truncate to one line with a tail ellipsis instead of wrapping
+- The selection tray (total size, item count, Review button) now appears
+  on the Explore and Apps screens too, not only on Cleanup's findings
+  screen - previously, selecting a file in Explore or an app in Apps gave
+  no visible way to reach Review without switching back to Cleanup first
+
+### Removed
+- **Apps**: the confirmation-sheet uninstall flow, its own "Select All"
+  checkbox, the per-row "quit and uninstall" convenience for a running
+  app, and the in-panel Settings/Home shortcut buttons are gone, replaced
+  by the shared checkbox-and-Review flow described above. A running app
+  you try to uninstall from Review is now skipped with an error rather
+  than offered a quit-and-retry
+
+### Changed
+- **The disk picker is shown on every launch again, regardless of how many
+  volumes you have** - reversing the single-volume auto-skip shipped
+  earlier. A full-disk scan can run well past two minutes, and a wait you
+  never chose reads as a hang, not thoroughness. The new screen states
+  what a scan will cost before it starts: each volume shows a time
+  estimate (a range, with what it's based on - a remembered item count
+  after the first scan, or a rough estimate before that), and external
+  drives are honestly labeled "Time unknown" rather than guessed. If you
+  already have results this session, a strip at the top offers to jump
+  straight back to them - starting a scan is always something you choose,
+  never something that happens for you
+  - Scanning a folder instead is front and center too, with one-click
+    pills for your three most recently scanned folders (or Downloads,
+    Desktop, and Documents before you've scanned anything)
+
+### Removed
+- **The direct "App Manager" tile and the "Reclaim Purgeable Space Now"
+  button are gone from the disk picker.** App Manager is still one click
+  away, from the sidebar, the moment any scan starts. Reclaiming purgeable
+  space manually has no replacement right now - the sidebar and onboarding
+  still explain what purgeable space is, they just don't offer to act on
+  it anymore
+
+### Fixed
+- Navigating to Cleanup with a scan that had already finished (e.g. "View
+  Results" from the disk picker, or "Review" from the menu bar after
+  switching screens) could get stuck showing a permanent "still scanning"
+  placeholder instead of the real findings
+- **The "Give DustEater Full Disk Access" step could report access as
+  granted when it hadn't actually been - it was checking whether a folder
+  could be *listed*, and that folder turns out to be readable by any app
+  regardless of Full Disk Access.** It now checks a location that
+  genuinely requires the real permission
 
 ### Added
 - **Menu bar monitoring**: an optional menu bar item keeps an eye on your
