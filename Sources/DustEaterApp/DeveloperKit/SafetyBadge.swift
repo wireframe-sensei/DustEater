@@ -40,7 +40,7 @@ struct SafetyBadge: View {
         // A literal `Capsule()`, not `metrics.buttonShape`:
         // `ControlMetrics.isCapsule` governs controls that draw themselves
         // as compact buttons, and a static badge like this one is not a
-        // control - the same distinction `DiskCardView` already documents
+        // control - the same distinction `VolumeCardView` already documents
         // for its own corner-radius choice in `DiskHomeView.swift`.
         .background(tint.opacity(0.15), in: Capsule())
     }

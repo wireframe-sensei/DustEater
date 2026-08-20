@@ -7,7 +7,6 @@ struct ContentView: View {
         case welcome
         case home
         case scanFlow
-        case appManager
     }
 
     let monitoringSettings: MonitoringSettingsStore
@@ -23,9 +22,12 @@ struct ContentView: View {
     // "modifying state during view update" hazard a `@State`-backed cache
     // would.
     @State private var treemapCache = TreemapCache()
-    // Set once, the first time `.home` would otherwise be shown, so a
-    // rescan or a return from a scan never re-triggers the auto-skip.
-    @State private var hasCheckedAutoSkip = false
+    // Wall-clock time the current session's scan last finished, for
+    // Home's returning-user strip - `ScanCoordinator` only tracks elapsed
+    // duration, not a timestamp. `nil` until a scan finishes at least once
+    // this session; never persisted, since the tree/findings it describes
+    // aren't persisted either (see `reviewFromMenuBar`'s doc comment).
+    @State private var lastScanFinishedAt: Date?
 
     @Environment(\.openSettings) private var openSettings
 
@@ -45,6 +47,19 @@ struct ContentView: View {
         return treemapCache.rects(for: displayNode, size: size, theme: selectedTheme)
     }
 
+    /// Non-nil only when this session's `coordinator` has a genuinely
+    /// finished scan - a scan cancelled before the tree completed has no
+    /// `lastScanFinishedAt` to report (the `.onChange` below only sets it
+    /// on `.finished`), and `.scanning` obviously isn't "previous" yet.
+    /// Drives Home's returning-user strip; see `DiskHomeView.
+    /// lastScanSummary`'s own doc comment for why this is never derived
+    /// from anything persisted across launches.
+    private var lastScanSummary: (finishedAt: Date, reclaimableBytes: Int64)? {
+        guard let lastScanFinishedAt, case .finished = coordinator.state else { return nil }
+        let reclaimableBytes = coordinator.findings.reduce(0) { $0 + $1.reclaimableBytes }
+        return (lastScanFinishedAt, reclaimableBytes)
+    }
+
     var body: some View {
         Group {
             screenContent
@@ -61,6 +76,17 @@ struct ContentView: View {
             )
             statusItemController.updateVolumePath(lastScannedPath ?? "/")
         }
+        // Remembers what a scan of this path turned out to cost, for
+        // Home's estimate row and folder-scan recents next time - and
+        // marks a wall-clock finish time for the returning-user strip.
+        // Deliberately keyed off `coordinator.state` rather than done
+        // inline in `startScan`, since a scan started from the menu bar
+        // (`rescanFromMenuBar`) needs the same bookkeeping.
+        .onChange(of: coordinator.state) { _, newState in
+            guard case .finished(let root) = newState else { return }
+            lastScanFinishedAt = Date()
+            HomeMemory.record(path: root.path, itemCount: root.itemCount, sizeBytes: root.size)
+        }
     }
 
     @ViewBuilder
@@ -72,24 +98,17 @@ struct ContentView: View {
                 screen = .home
             })
         case .home:
+            // Safety rule 13: a scan is never started for the user - Home
+            // shows on every launch, regardless of volume count (reversed
+            // 18 Aug; see the design handoff's section 11). No auto-skip
+            // task here anymore.
             DiskHomeView(
-                onSelectDisk: { path in
-                    startScan(path: path)
-                },
-                onSelectCustomFolder: {
-                    chooseFolder()
-                },
-                onOpenAppManager: {
-                    screen = .appManager
-                }
+                lastScanSummary: lastScanSummary,
+                onSelectVolume: { path in startScan(path: path) },
+                onChooseFolder: { chooseFolder() },
+                onSelectFolder: { path in startScan(path: path) },
+                onViewResults: { screen = .scanFlow }
             )
-            .task {
-                guard !hasCheckedAutoSkip else { return }
-                hasCheckedAutoSkip = true
-                if let onlyVolumePath = Self.onlyEligibleVolumePath() {
-                    startScan(path: onlyVolumePath)
-                }
-            }
         case .scanFlow:
             switch coordinator.state {
             case .idle:
@@ -139,32 +158,7 @@ struct ContentView: View {
             case .failed(let message):
                 ErrorStateView(message: message, onBackToHome: backToHome)
             }
-        case .appManager:
-            AppManagerView(onBackToHome: backToHome)
         }
-    }
-
-    /// The design handoff's disk picker collapses into the sidebar and is
-    /// skipped entirely when there's only one volume to scan. Duplicates
-    /// `DiskHomeView.loadDisks`'s volume filter rather than sharing it - two
-    /// call sites, and CLAUDE.md's Rule of Three says wait for a third
-    /// before extracting.
-    private static func onlyEligibleVolumePath() -> String? {
-        guard let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil) else {
-            return nil
-        }
-
-        let eligiblePaths = urls.map(\.path).filter { path in
-            !path.contains("/System/Volumes/") &&
-            !path.contains("/.") &&
-            !path.contains("/Library/Developer/CoreSimulator/") &&
-            !path.contains("SimRuntimeBundle") &&
-            !path.contains("iOS_") &&
-            !path.contains("watchOS_") &&
-            !path.contains("tvOS_")
-        }
-
-        return eligiblePaths.count == 1 ? eligiblePaths.first : nil
     }
 
     /// Shared by every "leave this scan and return to the disk picker" exit
@@ -219,11 +213,7 @@ struct ContentView: View {
         panel.prompt = "Scan"
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        screen = .scanFlow
-        coordinator.zoomNode = nil
-        treemapCache.invalidate()
-        coordinator.startScan(path: url.path)
+        startScan(path: url.path)
     }
 }
 

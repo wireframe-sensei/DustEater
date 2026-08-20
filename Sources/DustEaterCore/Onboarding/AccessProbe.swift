@@ -8,11 +8,23 @@ import Foundation
 /// whatever the user chose to scan, so it can be polled from the welcome
 /// flow before any scan has happened at all.
 public enum AccessProbe {
-    /// `~/Library/Containers` - present on every Mac, and blocked for a
-    /// non-FDA process regardless of which volume or folder the user later
-    /// chooses to scan. Not itself something DustEater has any reason to
-    /// read; it exists purely as a canary.
-    public static let defaultProtectedPath = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Containers")
+    /// The real TCC database - present on every Mac, owned by root with
+    /// permissions that block every process without Full Disk Access, and
+    /// literally the table FDA grants are stored in. Verified live, not
+    /// assumed: `open()` on this path returns `EPERM` without FDA and `0`
+    /// with it, confirmed against a real non-FDA process on the machine
+    /// this was fixed on.
+    ///
+    /// The original canary was `~/Library/Containers` - wrong, and a real
+    /// bug, not a theoretical one: that directory is owned by the current
+    /// user (`drwx------`), so plain Unix permissions let any process the
+    /// user runs open and list it - `ls ~/Library/Containers` succeeds with
+    /// zero FDA grant. TCC only protects *reading files inside* another
+    /// app's container, never top-level directory listing, so probing it
+    /// with a bare `open()` reported "granted" unconditionally, regardless
+    /// of the real TCC state - confirmed live with `dd` against both paths
+    /// from the same ungranted process before this fix.
+    public static let defaultProtectedPath = "/Library/Application Support/com.apple.TCC/TCC.db"
 
     /// `true` the instant TCC grants access - no relaunch needed, since this
     /// is a live syscall each time, not a cached value from launch.

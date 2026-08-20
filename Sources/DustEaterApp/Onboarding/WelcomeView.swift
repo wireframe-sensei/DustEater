@@ -8,10 +8,10 @@ import DustEaterCore
 /// Full Disk Access is still missing on a later launch - that's what
 /// Cleanup's limited-access card (item 9) is for.
 struct WelcomeView: View {
-    /// Called from step 3's "Start Scan" - hands off to whatever
-    /// `ContentView` already does to pick a volume and start scanning
-    /// (auto-skip if there's exactly one, otherwise `DiskHomeView`). This
-    /// view has no opinion on which path or volume gets scanned.
+    /// Called from step 3's "Continue" - hands off to `ContentView`, which
+    /// moves to `.home`. Onboarding never starts a scan itself (safety
+    /// rule 13): Home is what asks, on every launch, regardless of volume
+    /// count.
     let onComplete: () -> Void
 
     @State private var step = 0
@@ -60,7 +60,11 @@ struct WelcomeView: View {
                     .buttonStyle(.bordered)
             }
             Spacer()
-            Button(step == 2 ? "Start Scan" : "Continue") {
+            // Always "Continue", even on the last step - safety rule 13:
+            // choosing the scan target is the user's call and always has
+            // been, so onboarding hands off to Home, never straight into
+            // a scan.
+            Button("Continue") {
                 if step == 2 {
                     onComplete()
                 } else {

@@ -48,6 +48,27 @@ public final class DiskTelemetryService {
         return APFSVolumeMetrics.purgeableBytes(from: snapshot)
     }
 
+    public struct VolumeInterconnectKind: Sendable, Equatable {
+        public let isInternal: Bool
+        /// Free-text from IOKit - "USB", "Thunderbolt", "PCI-Express",
+        /// "SATA", or occasionally a raw, less friendly string IOKit
+        /// happened to report. `nil` when IOKit had nothing at all.
+        public let protocolName: String?
+    }
+
+    /// One specific volume's interconnect - internal vs external, plus
+    /// IOKit's free-text protocol name - for Home's `Internal · APFS` /
+    /// `External · USB` kind label. Same `PhysicalDiskResolver` +
+    /// `IORegistryDiskReader` round trip `gatherDiskHealth()` already makes
+    /// per mounted volume; exposed as its own entry point since Home needs
+    /// it per volume card without gathering full SMART/temperature health
+    /// for every physical disk.
+    public static func interconnectKind(atPath path: String) -> VolumeInterconnectKind? {
+        guard let bsdName = PhysicalDiskResolver.wholeDiskBSDName(forVolumeAt: path) else { return nil }
+        guard let characteristics = IORegistryDiskReader.deviceCharacteristics(forBSDName: bsdName) else { return nil }
+        return VolumeInterconnectKind(isInternal: characteristics.interconnect == .internal, protocolName: characteristics.interconnectProtocol)
+    }
+
     public func refresh() {
         refreshTask?.cancel()
 

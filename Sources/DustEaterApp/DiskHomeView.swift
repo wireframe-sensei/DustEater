@@ -8,10 +8,13 @@ struct DiskInfo: Identifiable {
     let path: String
     let totalSize: Int64
     let availableSize: Int64
+    let isInternal: Bool
+    /// "Internal · APFS" / "External · USB" - already formatted, since the
+    /// two cases pull from genuinely different sources (filesystem name vs
+    /// IOKit's interconnect protocol) and there's only one caller.
+    let kindLabel: String
 
-    var usedSize: Int64 {
-        totalSize - availableSize
-    }
+    var usedSize: Int64 { totalSize - availableSize }
 
     var usagePercentage: Double {
         guard totalSize > 0 else { return 0 }
@@ -19,161 +22,94 @@ struct DiskInfo: Identifiable {
     }
 }
 
+/// Home - safety rule 13: a scan is never started for the user, and the
+/// expected duration is stated before it begins. Always shown, on every
+/// launch, regardless of volume count (reversed 18 Aug - see the design
+/// handoff's section 11 for why auto-skipping a single volume was wrong).
+/// Replaces the whole window, like the welcome flow: no sidebar, since the
+/// three destinations are empty until something has been scanned.
 struct DiskHomeView: View {
     @State private var disks: [DiskInfo] = []
-    @State private var service = DiskTelemetryService()
     // Distinguishes "still loading" from "loaded, found nothing" - without
     // this, a machine where `mountedVolumeURLs` returns nil or every volume
-    // gets filtered out shows "Loading disks..." forever with no retry and
-    // no way to reach `CustomFolderCardView`, which used to live inside the
-    // same `else` branch as the disk grid and so was unreachable too.
+    // gets filtered out shows a spinner forever with no retry and no way
+    // to reach the folder-scan card, which must stay reachable regardless.
     @State private var hasLoadedOnce = false
-    let onSelectDisk: (String) -> Void
-    let onSelectCustomFolder: () -> Void
-    let onOpenAppManager: () -> Void
+
+    /// Non-nil only when this session already has results to show -
+    /// `ContentView` derives it from `coordinator`, never from anything
+    /// persisted across launches, since the actual scanned tree isn't
+    /// persisted either. Landing here must never force a rescan to reach
+    /// findings the app already has, so "View Results" only ever appears
+    /// when it can be honored without one.
+    let lastScanSummary: (finishedAt: Date, reclaimableBytes: Int64)?
+    let onSelectVolume: (String) -> Void
+    let onChooseFolder: () -> Void
+    let onSelectFolder: (String) -> Void
+    let onViewResults: () -> Void
+
+    private var volumePaths: Set<String> { Set(disks.map(\.path)) }
 
     var body: some View {
-        ZStack {
-            // Background
-            Color(nsColor: .windowBackgroundColor)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                // Header section with glass panel
-                VStack(spacing: 20) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "internaldrive")
-                            .font(.system(size: 48, weight: .light))
-                            .foregroundStyle(Color.accentColor)
-
-                        VStack(spacing: 6) {
-                            Text("Dust Eater")
-                                .font(.largeTitle.bold())
-                            Text("Choose a disk or folder to analyze")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
+        // Same centering approach as `WelcomeView`, and the same reason:
+        // a bare `Spacer` inside a `ScrollView` has no extra room to
+        // expand into unless the content is told it must be at least the
+        // viewport's size first.
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 32)
+                    VStack(alignment: .leading, spacing: 22) {
+                        if let lastScanSummary {
+                            returningUserStrip(lastScanSummary)
                         }
-                    }
+                        heading
 
-                    // Info panel with glass effect
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "info.circle.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Color.accentColor)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("About disk usage")
-                                    .font(.headline)
-                                Text("Folder sizes may differ slightly due to APFS snapshots and system overhead")
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                        }
-                    }
-                    .padding(14)
-                    .glassBackground(.ultraThinMaterial, cornerRadius: 12)
-                }
-                .padding(24)
-                .glassBackground(.ultraThinMaterial, cornerRadius: 16)
-                .padding(20)
-
-                if !hasLoadedOnce {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Loading disks...")
-                            .foregroundStyle(.secondary)
-                            .font(.body)
-                    }
-                    .controlSize(.large)
-                    .frame(maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            if disks.isEmpty {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .font(.system(size: 32))
-                                        .foregroundStyle(.secondary)
-                                    Text("No disks found")
-                                        .font(.headline)
-                                    Text("You can still browse a specific folder below, or try again.")
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                    Button("Retry", action: loadDisks)
-                                        .font(.control)
-                                        .buttonStyle(.bordered)
-                                        .padding(.top, 4)
-                                }
-                                .padding(.top, 20)
-                            }
-
-                            // `CustomFolderCardView` deliberately sits outside
-                            // the `disks.isEmpty` branch above: it doesn't
-                            // depend on volume enumeration at all, so it must
-                            // stay reachable even when no disks were found -
-                            // otherwise a machine with zero visible volumes
-                            // would have no way to proceed past this screen.
-                            let columns = [
-                                GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 16)
-                            ]
-
-                            LazyVGrid(columns: columns, spacing: 16) {
+                        if !hasLoadedOnce {
+                            ProgressView()
+                                .controlSize(.large)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 40)
+                        } else if disks.isEmpty {
+                            emptyState
+                        } else {
+                            VStack(spacing: 12) {
                                 ForEach(disks) { disk in
-                                    DiskCardView(disk: disk) {
-                                        onSelectDisk(disk.path)
-                                    }
+                                    VolumeCardView(disk: disk, onTap: { onSelectVolume(disk.path) })
                                 }
-
-                                CustomFolderCardView(onTap: onSelectCustomFolder)
-                                AppManagerCardView(onTap: onOpenAppManager)
                             }
-                            .controlSize(.extraLarge)
-                            .padding(20)
-
-                            if case .loaded(let diskHealth) = service.state, !diskHealth.isEmpty {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Purgeable Space")
-                                        .font(.headline)
-                                        .padding(.leading, 20)
-
-                                    ForEach(diskHealth) { disk in
-                                        PurgeableSpaceSection(
-                                            disk: disk,
-                                            reclaimState: service.reclaimState,
-                                            onReclaimTap: { service.reclaimPurgeableSpace(forVolumeAt: disk.bsdName) }
-                                        )
-                                    }
-                                    .padding(.horizontal, 20)
-                                }
-                                .padding(.bottom, 20)
-                            }
+                            Text("You can stop a scan at any time and keep whatever it has already found.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
                         }
-                    }
-                }
 
-                Spacer()
+                        folderDivider
+
+                        FolderScanCardView(
+                            recentFolders: HomeMemory.recentFolders(excluding: volumePaths, limit: 3),
+                            onChooseFolder: onChooseFolder,
+                            onSelectFolder: onSelectFolder
+                        )
+                    }
+                    .frame(width: 600)
+                    Spacer(minLength: 32)
+                }
+                .frame(minWidth: geometry.size.width, minHeight: geometry.size.height)
             }
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             loadDisks()
         }
         // Structured concurrency, not a `Timer`: this loop starts when
         // `DiskHomeView` appears and is cancelled automatically the moment
-        // it leaves the view hierarchy (when `isOnHome` flips to `false` in
-        // `ContentView`, the `if isOnHome { DiskHomeView(...) }` branch is
-        // torn down, not just hidden) - so it never runs while a scan is
-        // showing.
+        // it leaves the view hierarchy.
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { return }
                 loadDisks()
             }
-        }
-        .task {
-            service.refresh()
         }
         // Mount/unmount/rename fire immediately, so plugging in or ejecting
         // a drive feels instant rather than waiting for the next poll.
@@ -186,6 +122,73 @@ struct DiskHomeView: View {
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didRenameVolumeNotification)) { _ in
             loadDisks()
         }
+    }
+
+    private func returningUserStrip(_ summary: (finishedAt: Date, reclaimableBytes: Int64)) -> some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Last scanned \(Self.relativeTimeText(summary.finishedAt))")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("\(ByteFormatter.string(fromBytes: summary.reclaimableBytes)) reclaimable was found. Those results are still here.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Button("View Results", action: onViewResults)
+                .font(.control)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(14)
+        .background(Color.opaqueTertiaryFill, in: RoundedRectangle(cornerRadius: CleanupMetrics.panelCardRadius))
+        .hairlineRing(cornerRadius: CleanupMetrics.panelCardRadius)
+    }
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Choose what to scan")
+                .font(.system(size: 26, weight: .bold))
+            Text("A full disk scan reads every file once. That is thorough, and on a large disk it takes a few minutes. Scanning a single folder takes seconds.")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "externaldrive.badge.questionmark")
+                .font(.system(size: 32))
+                .foregroundStyle(.tertiary)
+            Text("No disks found")
+                .font(.system(size: 13, weight: .semibold))
+            Text("You can still scan a folder below, or try again.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            Button("Retry", action: loadDisks)
+                .font(.control)
+                .buttonStyle(.bordered)
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+    }
+
+    private var folderDivider: some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
+            Text("or scan one folder")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .fixedSize()
+            Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1)
+        }
+    }
+
+    private static func relativeTimeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .short
+        formatter.timeStyle = .short
+        let time = formatter.string(from: date)
+        return Calendar.current.isDateInToday(date) ? "Today \(time)" : time
     }
 
     private func loadDisks() {
@@ -214,20 +217,30 @@ struct DiskHomeView: View {
             }
 
             do {
-                let values = try url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey, .nameKey])
+                let values = try url.resourceValues(forKeys: [
+                    .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .nameKey, .volumeLocalizedFormatDescriptionKey
+                ])
 
-                if let totalSize = values.volumeTotalCapacity,
-                   let availableSize = values.volumeAvailableCapacity,
-                   let name = values.name {
-                    diskList.append(
-                        DiskInfo(
-                            name: name,
-                            path: path,
-                            totalSize: Int64(totalSize),
-                            availableSize: Int64(availableSize)
-                        )
+                guard let totalSize = values.volumeTotalCapacity,
+                      let availableSize = values.volumeAvailableCapacity,
+                      let name = values.name else { continue }
+
+                let interconnect = DiskTelemetryService.interconnectKind(atPath: path)
+                let isInternal = interconnect?.isInternal ?? true
+                let kindLabel = isInternal
+                    ? "Internal · \(values.volumeLocalizedFormatDescription ?? "APFS")"
+                    : "External · \(interconnect?.protocolName ?? "External")"
+
+                diskList.append(
+                    DiskInfo(
+                        name: name,
+                        path: path,
+                        totalSize: Int64(totalSize),
+                        availableSize: Int64(availableSize),
+                        isInternal: isInternal,
+                        kindLabel: kindLabel
                     )
-                }
+                )
             } catch {
                 continue
             }
@@ -238,147 +251,224 @@ struct DiskHomeView: View {
     }
 }
 
-/// A custom-drawn card, not a system button style - it draws its own
-/// background rather than delegating to `.borderedProminent`/`.bordered`,
-/// so unlike those it has to read its corner radius from `ControlMetrics`
-/// itself. Deliberately reads `cornerRadius` only, not `isCapsule`: this is
-/// a wide card, not a compact pill button, so it should never collapse into
-/// a capsule the way a real Large/XL button would.
-struct CustomFolderCardView: View {
+/// The scan target itself, per the design handoff: "the whole card is the
+/// click target... there is no arrow or button glyph on the card - the
+/// heading already says 'Choose what to scan'." Deliberately reads
+/// `metrics.cornerRadius` only, not `isCapsule`, the same reasoning
+/// `SafetyBadge` documents for its own corner-radius choice - this is a
+/// wide card, not a compact pill button.
+private struct VolumeCardView: View {
+    let disk: DiskInfo
     let onTap: () -> Void
-    @Environment(\.controlMetrics) private var metrics
+    @State private var isHovering = false
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: "folder.circle.fill")
-                    .font(.system(size: 40))
-                    .foregroundStyle(Color.accentColor.opacity(0.8))
+            VStack(alignment: .leading, spacing: 8) {
+                Text(disk.name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(disk.kindLabel)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Browse Custom Folder")
-                        .font(.control)
-                        .foregroundStyle(.primary)
-                    Text("Select any folder")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.progressTrack)
+                    GeometryReader { geometry in
+                        Capsule()
+                            .fill(barGradient)
+                            .frame(width: geometry.size.width * max(0, min(1, disk.usagePercentage / 100)))
+                    }
                 }
-                Spacer()
+                .frame(height: 5)
+                .padding(.top, 2)
+
+                Text("\(ByteFormatter.string(fromBytes: disk.availableSize)) free of \(ByteFormatter.string(fromBytes: disk.totalSize))")
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundStyle(.secondary)
+
+                estimateRow
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: 160)
             .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
+            .background(
+                isHovering ? Color.accentColor.opacity(0.08) : Color.opaqueTertiaryFill,
+                in: RoundedRectangle(cornerRadius: CleanupMetrics.panelCardRadius)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: CleanupMetrics.panelCardRadius)
+                    .strokeBorder(isHovering ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isHovering ? 1.5 : 1)
+            )
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
+        .onHover { isHovering = $0 }
+    }
+
+    private var barGradient: LinearGradient {
+        disk.usagePercentage > 80
+            ? LinearGradient(colors: [Color(nsColor: .systemOrange), Color(nsColor: .systemRed)], startPoint: .leading, endPoint: .trailing)
+            : LinearGradient(colors: [Color.accentColor], startPoint: .leading, endPoint: .trailing)
+    }
+
+    private var estimateRow: some View {
+        let estimate = ScanEstimate.forVolume(disk)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text(estimate.figure)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            Text(estimate.basis)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 4)
     }
 }
 
-// See `CustomFolderCardView` above - same reasoning: a custom-drawn card,
-// so it reads its own corner radius from `ControlMetrics.cornerRadius`
-// rather than `isCapsule`.
-struct DiskCardView: View {
-    let disk: DiskInfo
-    let onTap: () -> Void
-    @State private var isHovered = false
-    @Environment(\.controlMetrics) private var metrics
+/// The three cases in the design handoff's estimate table. Deliberately a
+/// range with its basis always stated, never a single confident number -
+/// "macOS gives no cheap file count, so a first-run figure is extrapolated
+/// from used bytes and will sometimes be wrong by a factor. A range that
+/// names its own basis survives being wrong."
+private enum ScanEstimate {
+    static func forVolume(_ disk: DiskInfo) -> (figure: String, basis: String) {
+        guard disk.isInternal else {
+            return ("Time unknown", "external volume - speed depends on the connection, so DustEater will not guess")
+        }
+        if let remembered = HomeMemory.scan(atPath: disk.path) {
+            return (
+                minuteRange(forItemCount: remembered.itemCount),
+                "\(formattedItemCount(remembered.itemCount)) items last time - a scan of this disk reads every one of them"
+            )
+        } else {
+            let estimatedItems = Int(Double(disk.usedSize) / 1_000_000_000 * itemsPerUsedGB)
+            return (
+                "Usually \(minuteRange(forItemCount: estimatedItems))",
+                "for a disk this size; DustEater will know precisely after the first scan"
+            )
+        }
+    }
+
+    /// A rough real-world throughput range for the main scan walk, not a
+    /// measured constant - the fast end assumes an unloaded SSD with
+    /// nothing else contending for `BlockingIO`, the slow end assumes real
+    /// contention. Picked so a 10.2M-item disk (the design handoff's own
+    /// worked example) lands on exactly "2-4 minutes"; recorded here so a
+    /// future session can recalibrate against real benchmark data rather
+    /// than guessing why these particular numbers were chosen.
+    private static let fastItemsPerMinute: Double = 85_000 * 60
+    private static let slowItemsPerMinute: Double = 42_500 * 60
+    /// Items-per-used-GB for the first-run case, where there is no
+    /// remembered item count to extrapolate from at all - a coarse stand-in
+    /// for "macOS gives no cheap file count."
+    private static let itemsPerUsedGB: Double = 20_000
+
+    private static func minuteRange(forItemCount itemCount: Int) -> String {
+        guard itemCount > 0 else { return "under a minute" }
+        let lowRaw = Double(itemCount) / fastItemsPerMinute
+        let highRaw = Double(itemCount) / slowItemsPerMinute
+        guard highRaw >= 1 else { return "under a minute" }
+        let lowMinutes = max(1, Int(lowRaw.rounded()))
+        let highMinutes = max(lowMinutes, Int(highRaw.rounded()))
+        return lowMinutes == highMinutes ? "\(lowMinutes) minutes" : "\(lowMinutes)-\(highMinutes) minutes"
+    }
+
+    private static func formattedItemCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        } else if count >= 1_000 {
+            return String(format: "%.0fK", Double(count) / 1_000)
+        }
+        return "\(count)"
+    }
+}
+
+/// "Useful when you already know where the space went - Downloads, a
+/// project directory, an old backup." The recents are what make this path
+/// fast to re-use; without them it's a file dialog nobody opens twice.
+private struct FolderScanCardView: View {
+    let recentFolders: [(path: String, scan: RecordedScan)]
+    let onChooseFolder: () -> Void
+    let onSelectFolder: (String) -> Void
+
+    /// On a first run there are no recents - a size is only known for a
+    /// folder already scanned - so these show bare, with no size, rather
+    /// than leaving an empty row that reads as a broken card.
+    private static let bareDefaults = ["~/Downloads", "~/Desktop", "~/Documents"]
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 14) {
-                // Top section with icon
-                HStack {
-                    Image(systemName: "internaldrive.fill")
-                        .font(.system(size: 32, weight: .semibold))
-                        .foregroundStyle(Color.accentColor.opacity(0.8))
-                    Spacer()
-                }
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Scan a folder instead")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Useful when you already know where the space went - Downloads, a project directory, an old backup. Finishes in seconds.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
 
-                // Disk info
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(disk.name)
-                        .font(.control)
-                        .foregroundStyle(.primary)
-                    Text(disk.path)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+            Button("Choose Folder…", action: onChooseFolder)
+                .font(.control)
+                .buttonStyle(.bordered)
 
-                Spacer()
+            pillsRow
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.opaqueTertiaryFill, in: RoundedRectangle(cornerRadius: CleanupMetrics.panelCardRadius))
+        .hairlineRing(cornerRadius: CleanupMetrics.panelCardRadius)
+    }
 
-                // Usage section
-                VStack(alignment: .leading, spacing: 10) {
-                    // Size display
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(ByteFormatter.string(fromBytes: disk.usedSize))
-                                .font(.body.weight(.semibold).monospaced())
-                                .foregroundStyle(.primary)
-                            Text("of \(ByteFormatter.string(fromBytes: disk.totalSize))")
-                                .font(.subheadline.monospaced())
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text("\(String(format: "%.0f", disk.usagePercentage))%")
-                            .font(.body.weight(.semibold).monospaced())
-                            .foregroundStyle(usageColor)
-                    }
-
-                    // Progress bar
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.progressTrack)
-
-                        Capsule()
-                            .fill(usageColor)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .scaleEffect(x: disk.usagePercentage / 100.0, y: 1, anchor: .leading)
-                    }
-                    .frame(height: 5)
+    @ViewBuilder
+    private var pillsRow: some View {
+        if recentFolders.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(Self.bareDefaults, id: \.self) { path in
+                    folderPill(label: path, sizeText: nil, fullPath: (path as NSString).expandingTildeInPath)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: 160)
-            .padding(16)
-            .contentShape(Rectangle())
-            .glassBackground(.ultraThinMaterial, cornerRadius: metrics.cornerRadius)
-            .foregroundStyle(.primary)
-            .opacity(isHovered ? 0.9 : 1.0)
-        }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
-        .onContinuousHover { phase in
-            if case .active = phase {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isHovered = true
-                }
-            } else {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isHovered = false
+        } else {
+            HStack(spacing: 8) {
+                ForEach(recentFolders, id: \.path) { entry in
+                    folderPill(
+                        label: (entry.path as NSString).abbreviatingWithTildeInPath,
+                        sizeText: ByteFormatter.string(fromBytes: entry.scan.sizeBytes),
+                        fullPath: entry.path
+                    )
                 }
             }
         }
     }
 
-    private var usageColor: Color {
-        let percentage = disk.usagePercentage
-        if percentage > 80 {
-            return Color(nsColor: .systemRed)
-        } else if percentage > 60 {
-            return Color(nsColor: .systemYellow)
-        } else {
-            return Color(nsColor: .systemGreen)
+    private func folderPill(label: String, sizeText: String?, fullPath: String) -> some View {
+        Button(action: { onSelectFolder(fullPath) }) {
+            HStack(spacing: 6) {
+                Text(label)
+                if let sizeText {
+                    Text(sizeText).foregroundStyle(.secondary)
+                }
+            }
+            .font(.system(size: 11).monospaced())
+            .padding(.horizontal, 12)
+            .frame(height: 22)
+            .background(Color.opaqueTertiaryFill, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
         }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
     }
 }
 
 #Preview {
     DiskHomeView(
-        onSelectDisk: { _ in },
-        onSelectCustomFolder: {},
-        onOpenAppManager: {}
+        lastScanSummary: nil,
+        onSelectVolume: { _ in },
+        onChooseFolder: {},
+        onSelectFolder: { _ in },
+        onViewResults: {}
     )
 }

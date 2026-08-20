@@ -268,6 +268,48 @@ Presentation follows the kit's notification: 16 pt radius, ultra-thick material,
 
 The receipt's existing "Keep watching this disk" card is the other entry point and needs no change.
 
+### 11. Home — choose what to scan
+
+**Reversal, 18 Aug.** The original spec skipped this screen when there was only one volume, on the reasoning that a picker with one option is friction. That was wrong. A full-disk scan of a 500 GB / 10M-item volume runs well past two minutes, and a two-minute wait the user never chose does not read as thoroughness — it reads as a hang. **Home is now always shown, on every launch, regardless of volume count.**
+
+It does three things, in this order of importance:
+
+1. **States the cost before the scan starts,** so the wait is expected rather than suffered.
+2. **Makes the scan an explicit decision** — a button the user pressed, which is what buys patience.
+3. **Offers a folder scan as a real alternative,** for users who already know where the space went.
+
+Like the welcome flow this **replaces the whole window** — no sidebar, since the three destinations are empty until something has been scanned. Centred 600 pt column, 52 pt stoplight strip.
+
+**Returning-user strip** (only when a previous scan exists, at the very top): "Last scanned Today 10:43" with "24.65 GB reclaimable was found. Those results are still here." and a **View Results** pill straight to Cleanup. Landing on home must never force a rescan to reach findings the app already has — that would make the screen a tax instead of a choice.
+
+**Heading:** "Choose what to scan" / *"A full disk scan reads every file once. That is thorough, and on a large disk it takes a few minutes. Scanning a single folder takes seconds."* The comparison is the point: it frames the wait as the price of completeness and names the cheaper option in the same breath.
+
+**Volume cards are the scan button.** One per mounted volume, 12 pt radius, `fills-opaque-tertiary` with a 1 pt hairline; the whole card is the click target and takes `rgba(0,136,255,0.08)` with a 1.5 pt `--accents-blue` ring on hover. There is no arrow or button glyph on the card — the heading already says "Choose what to scan", so the card being clickable is the whole affordance.
+
+**There is no separate primary button, and no selection step.** An earlier version had the user select a card and then press `Scan Macintosh HD`; that is two controls doing one job, and with a single volume the selection ring is decoration. Card-as-button is also what DaisyDisk and OmniDiskSweeper do, and it matters here because people opening a disk cleaner usually arrived via a disk-full warning and want the shortest path to an answer.
+
+Each card carries the volume name at 15 pt semibold, an `Internal · APFS` / `External · USB` kind label, a 5 pt capacity bar (orange→red gradient over 80% used, plain blue below), and `77.05 GB free of 460.43 GB` in mono tabular.
+
+Then the **estimate row** — a clock glyph, the figure in 11 pt semibold, and its basis in secondary:
+
+| State | Shows | Basis text |
+| --- | --- | --- |
+| Item count known from a previous scan | `2–4 minutes` | "10.2M items last time — a scan of this disk reads every one of them" |
+| First run, no count yet | `Usually 2–4 minutes` | "for a disk this size; DustEater will know precisely after the first scan" |
+| External volume | `Time unknown` | "external volume — speed depends on the connection, so DustEater will not guess" |
+
+**External volumes get no figure at all.** Throughput over USB varies by an order of magnitude with the enclosure and cable, and a wrong estimate costs more credibility than an absent one buys convenience.
+
+**The estimate must stay a range, and must say what it is based on.** macOS gives no cheap file count, so a first-run figure is extrapolated from used bytes and will sometimes be wrong by a factor. A range that names its own basis survives being wrong; a confident "2 minutes" that turns into six does not. After the first scan the remembered item count makes it specific — which is also why the wording changes rather than the number alone.
+
+Below the cards, 11 pt tertiary: "You can stop a scan at any time and keep whatever it has already found." That sentence is what makes clicking a card low-risk, and it is true — `.cancelled` already preserves findings.
+
+**Folder scan,** under an "or scan one folder" hairline divider: a card with "Scan a folder instead" / *"Useful when you already know where the space went — Downloads, a project directory, an old backup. Finishes in seconds."*, a **Choose Folder…** pill, and recent folders as 22 pt mono pills with their last-known size (`~/Downloads 18.4 GB`). The recents are what make this path fast to re-use; without them it is a file dialog nobody opens twice.
+
+**On a first run there are no recents** — a size is only known for a folder already scanned — so the row shows `~/Downloads`, `~/Desktop` and `~/Documents` bare, with no size. An empty row here reads as a broken card.
+
+**Onboarding now ends here,** not at a scan — welcome step 3's button reads "Continue" rather than "Start Scan", because choosing the target is the user's call and always has been.
+
 ### As built — where items 7–8 diverge from the specs above
 
 Four differences, all decided during implementation and all kept:
@@ -340,6 +382,8 @@ The reclaimed figure is the one place in the app worth animating — count it up
 | `notifyLowSpace` / `notifyJunk` | Bool | the two independent notification settings |
 | `lowSpaceThreshold` / `junkThreshold` | value | 10% and 5 GB by default |
 | `lastCheck` | date | drives the dropdown footer; monitoring checks run every 6 hours |
+| `lastScan` | date + total | drives the home strip and the "items last time" estimate basis |
+| `recentFolders` | list | path + last-known size, for the folder-scan pills |
 | `accessState` | enum | `idle` / `waiting` / `granted` / `skipped`; `skipped` and a real denied check both drive limited-access mode |
 
 Derived, never stored: group subtotals, total reclaimable, selection size, whether the selection contains Caution or user-content items, the filtered file list.
@@ -358,6 +402,7 @@ Derived, never stored: group subtotals, total reclaimable, selection size, wheth
 10. No recommendation, ranking or auto-selection ever appears on the user's own content.
 11. When access is limited, totals are reported as measured — never hedged — and the skipped locations are named on the Cleanup screen.
 12. Notifications about growth count rebuildable findings only. A growing Photos library or video project must never produce a notification.
+13. A scan is never started for the user. Home is always shown, and it states the expected duration before the scan begins.
 
 ## Design tokens
 
@@ -402,7 +447,7 @@ See "Implementation status" at the top for what shipped differently from this pl
 
 From the project's screen map:
 
-- `Sources/DustEaterApp/DiskHomeView.swift` — the disk picker collapses into the sidebar context block; skip the screen entirely when there is one volume.
+- `Sources/DustEaterApp/DiskHomeView.swift` — **kept as a screen, and never skipped** (reversed 18 Aug; see section 11). The sidebar context block still shows the volume, but it does not replace the picker.
 - `Sources/DustEaterApp/DiskHealth/PurgeableSpaceSection.swift` — becomes the sidebar purgeable line.
 - `Sources/DustEaterCore/ScanState.swift` — must publish partial findings, not just progress.
 - `Sources/DustEaterApp/TreemapView.swift`, `FileTreeListView.swift` — move under Explore's Treemap mode.
