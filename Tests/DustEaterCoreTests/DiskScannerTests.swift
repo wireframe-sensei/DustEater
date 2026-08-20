@@ -175,6 +175,108 @@ struct DiskScannerTests {
         #expect(photoEntries.first { $0.name == "y.heic" }?.isPhotosManaged == false)
     }
 
+    /// A `node_modules` tree becomes exactly one `.codeAndProjects` entry
+    /// carrying its full recursive size, flagged `isDependencyDirectory` -
+    /// individual files inside (a `.js` file, a stray `.png` icon asset a
+    /// package ships) must never separately appear under
+    /// `.codeAndProjects`/`.photos`, the same "a folder is the natural
+    /// unit" reasoning `appBundleBecomesOneApplicationsEntryNotIndividualFiles`
+    /// already establishes for `.app` bundles.
+    @Test func dependencyDirectoryBecomesOneEntryNotIndividualFiles() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write(1000, to: "myproject/node_modules/typescript/lib/typescript.js", in: root)
+        try write(2000, to: "myproject/node_modules/.pnpm/lodash@4/index.js", in: root)
+        try write(500, to: "myproject/node_modules/icons/logo.png", in: root)
+        try write(300, to: "myproject/src/main.ts", in: root)
+
+        let scanner = DiskScanner()
+        let (_, index) = await scanner.scanWithTypeIndex(rootPath: root.path)
+
+        let codeEntries = index.entries(for: .codeAndProjects)
+        let nodeModulesEntry = codeEntries.first { $0.name == "node_modules" }
+        #expect(nodeModulesEntry != nil)
+        #expect(nodeModulesEntry?.isDependencyDirectory == true)
+        #expect(nodeModulesEntry?.sizeBytes ?? 0 >= 3500)
+
+        // Only the loose source file, not the dependency tree's own icon,
+        // appears as an individual .codeAndProjects entry.
+        #expect(codeEntries.contains { $0.name == "main.ts" })
+        #expect(!codeEntries.contains { $0.name == "logo.png" })
+        #expect(index.total(for: .photos).fileCount == 0)
+    }
+
+    /// A dependency directory nested inside another (pnpm's own storage
+    /// layout does this) must not become its own second entry - it's
+    /// already counted as part of the outer directory's recursive size,
+    /// mirroring `nestedAppBundleIsNotDoubleRecorded`.
+    @Test func nestedDependencyDirectoryIsNotDoubleRecorded() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write(1000, to: "myproject/node_modules/.pnpm/pkg@1/node_modules/pkg/index.js", in: root)
+
+        let scanner = DiskScanner()
+        let (_, index) = await scanner.scanWithTypeIndex(rootPath: root.path)
+
+        let nodeModulesEntries = index.entries(for: .codeAndProjects).filter { $0.name == "node_modules" }
+        #expect(nodeModulesEntries.count == 1)
+    }
+
+    /// A Final Cut Pro library becomes one `.videos` entry, flagged
+    /// `isProtectedBundle` - its internal render files and project assets
+    /// must not scatter across `.videos`/`.other` individually.
+    @Test func creativeSuiteLibraryBecomesOneEntryNotIndividualFiles() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write(1000, to: "Wedding.fcpbundle/CurrentVersion.fcpevent/render.mov", in: root)
+        try write(500, to: "Wedding.fcpbundle/project.json", in: root)
+        try write(200, to: "standalone.mov", in: root)
+
+        let scanner = DiskScanner()
+        let (_, index) = await scanner.scanWithTypeIndex(rootPath: root.path)
+
+        let videoEntries = index.entries(for: .videos)
+        let bundleEntry = videoEntries.first { $0.name == "Wedding.fcpbundle" }
+        #expect(bundleEntry != nil)
+        #expect(bundleEntry?.isProtectedBundle == true)
+        #expect(bundleEntry?.sizeBytes ?? 0 >= 1500)
+
+        // Only the standalone file, not the bundle's own render.mov, is
+        // individually recorded - and the bundle's project.json (a
+        // recognized code/project extension) must not leak into
+        // .codeAndProjects either, since it's inside a protected bundle.
+        #expect(videoEntries.contains { $0.name == "standalone.mov" })
+        #expect(!videoEntries.contains { $0.name == "render.mov" })
+        #expect(index.total(for: .codeAndProjects).fileCount == 0)
+    }
+
+    /// Regression test: an earlier version tracked "inside a `.app`
+    /// bundle" and "inside a protected bundle" as two independent flags,
+    /// so a `.framework` sitting inside a `.app` (the routine case - most
+    /// frameworks live inside the apps that ship them) was both correctly
+    /// folded into the app's `.applications` total *and* incorrectly
+    /// recorded a second time as its own `.other` entry, double-counting
+    /// its bytes. Only the outermost container - the `.app` here - may
+    /// ever aggregate.
+    @Test func protectedBundleNestedInsideAppBundleIsNotDoubleRecorded() async throws {
+        let root = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try write(1000, to: "MyApp.app/Contents/MacOS/MyApp", in: root)
+        try write(2000, to: "MyApp.app/Contents/Frameworks/Sparkle.framework/Versions/A/Sparkle", in: root)
+
+        let scanner = DiskScanner()
+        let (_, index) = await scanner.scanWithTypeIndex(rootPath: root.path)
+
+        #expect(index.total(for: .applications).fileCount == 1)
+        #expect(index.entries(for: .applications).first?.sizeBytes ?? 0 >= 3000)
+        // The framework must not also appear as its own .other entry.
+        #expect(index.total(for: .other).fileCount == 0)
+    }
+
     @Test func scanIgnoringTypeIndexStillWorksUnchanged() async throws {
         let root = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }

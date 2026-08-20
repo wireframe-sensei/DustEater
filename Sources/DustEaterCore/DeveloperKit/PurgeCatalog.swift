@@ -418,56 +418,47 @@ public enum PurgeCatalog {
         ]
     }
 
+    /// Builds a `.rebuildable` project-artifact definition from
+    /// `DependencyDirectoryCatalog`'s shared editorial copy - the sibling
+    /// check is this function's own job (a real, deletable Developer Kit
+    /// target needs it), the wording doesn't have to be re-typed here.
+    private static func discoveredTarget(path: String, name: String) -> PurgeTargetDefinition? {
+        guard let info = DependencyDirectoryCatalog.editorialInfo(forName: name) else { return nil }
+        return PurgeTargetDefinition(
+            path: path,
+            title: info.title,
+            detail: info.detail,
+            categoryID: .projectArtifacts,
+            safety: .rebuildable,
+            rebuildCommand: info.rebuildCommand
+        )
+    }
+
     /// Directory names that mark a project-local build artifact, matched
     /// during `discover`'s tree walk. Distinct from `DeveloperArtifactFolders`
     /// (which this module does not reuse): that list is deliberately loose
     /// because it only ever *filters a display list*, and its own doc
     /// comment admits `target` over-matches. A sibling-file requirement here
     /// tightens exactly the entries that need it, because this module
-    /// *deletes* what it matches.
+    /// *deletes* what it matches - `DiskScanner`'s type-index classification
+    /// (Explore's Code & Projects) reads the same `DependencyDirectoryCatalog`
+    /// names without a sibling check at all, since a mislabeled browse-only
+    /// row costs nothing the way a wrong deletion candidate would.
     private static func discoveredDefinition(for node: FileNode, siblingNames: Set<String>) -> PurgeTargetDefinition? {
         let name = node.name
         let path = node.path
 
         if name == "node_modules" {
-            return PurgeTargetDefinition(
-                path: path,
-                title: "node_modules",
-                detail: "JavaScript/TypeScript dependency tree.",
-                categoryID: .projectArtifacts,
-                safety: .rebuildable,
-                rebuildCommand: "npm install"
-            )
+            return discoveredTarget(path: path, name: name)
         }
         if name == "target", siblingNames.contains("Cargo.toml") {
-            return PurgeTargetDefinition(
-                path: path,
-                title: "target",
-                detail: "Rust build output for this Cargo project.",
-                categoryID: .projectArtifacts,
-                safety: .rebuildable,
-                rebuildCommand: "cargo build"
-            )
+            return discoveredTarget(path: path, name: name)
         }
         if name == ".build", siblingNames.contains("Package.swift") {
-            return PurgeTargetDefinition(
-                path: path,
-                title: ".build",
-                detail: "Swift Package Manager build output for this package.",
-                categoryID: .projectArtifacts,
-                safety: .rebuildable,
-                rebuildCommand: "swift build"
-            )
+            return discoveredTarget(path: path, name: name)
         }
         if name == "Pods", siblingNames.contains("Podfile") {
-            return PurgeTargetDefinition(
-                path: path,
-                title: "Pods",
-                detail: "CocoaPods dependency tree for this project.",
-                categoryID: .projectArtifacts,
-                safety: .rebuildable,
-                rebuildCommand: "pod install"
-            )
+            return discoveredTarget(path: path, name: name)
         }
         if name == "__pycache__" || name == ".pytest_cache" || name == ".tox" {
             return PurgeTargetDefinition(
@@ -482,14 +473,18 @@ public enum PurgeCatalog {
             guard siblingNames.contains("requirements.txt") || siblingNames.contains("pyproject.toml") else {
                 return nil
             }
-            return PurgeTargetDefinition(
-                path: path,
-                title: name,
-                detail: "Python virtual environment for this project.",
-                categoryID: .projectArtifacts,
-                safety: .rebuildable,
-                rebuildCommand: "pip install -r requirements.txt"
-            )
+            return discoveredTarget(path: path, name: name)
+        }
+        if name == ".next", siblingNames.contains("package.json") {
+            return discoveredTarget(path: path, name: name)
+        }
+        if name == "dist" || name == "build" {
+            guard siblingNames.contains("package.json") else { return nil }
+            return discoveredTarget(path: path, name: name)
+        }
+        if name == "DerivedData",
+           siblingNames.contains(where: { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }) {
+            return discoveredTarget(path: path, name: name)
         }
         if name == "Adobe Premiere Pro Video Previews"
             || name == "Adobe Premiere Pro Audio Previews"

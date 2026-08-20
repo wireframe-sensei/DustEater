@@ -124,6 +124,68 @@ struct PurgeDiscoveryTests {
         #expect(PurgeCatalog.discover(in: root).isEmpty)
     }
 
+    @Test func nextRequiresSiblingPackageJSON() {
+        let next = dir(".next", path: "/Users/x/webapp/.next", size: 300)
+        let packageJSON = file("package.json", path: "/Users/x/webapp/package.json", size: 1)
+        let project = dir("webapp", path: "/Users/x/webapp", size: 301, children: [next, packageJSON])
+        let root = dir("x", path: "/Users/x", size: 301, children: [project])
+
+        let targets = PurgeCatalog.discover(in: root)
+
+        #expect(targets.count == 1)
+        #expect(targets.first?.path == "/Users/x/webapp/.next")
+        #expect(targets.first?.definition.rebuildCommand == "npm run build")
+    }
+
+    @Test func nextNotMatchedWithoutPackageJSON() {
+        let next = dir(".next", path: "/Users/x/other/.next", size: 50)
+        let other = dir("other", path: "/Users/x/other", size: 50, children: [next])
+        let root = dir("x", path: "/Users/x", size: 50, children: [other])
+
+        #expect(PurgeCatalog.discover(in: root).isEmpty)
+    }
+
+    @Test func distAndBuildRequireSiblingPackageJSON() {
+        let dist = dir("dist", path: "/Users/x/webapp/dist", size: 300)
+        let build = dir("build", path: "/Users/x/webapp/build", size: 400)
+        let packageJSON = file("package.json", path: "/Users/x/webapp/package.json", size: 1)
+        let project = dir("webapp", path: "/Users/x/webapp", size: 701, children: [dist, build, packageJSON])
+        let root = dir("x", path: "/Users/x", size: 701, children: [project])
+
+        let targets = PurgeCatalog.discover(in: root)
+
+        #expect(Set(targets.map(\.path)) == ["/Users/x/webapp/dist", "/Users/x/webapp/build"])
+    }
+
+    @Test func distNotMatchedWithoutPackageJSON() {
+        let dist = dir("dist", path: "/Users/x/other/dist", size: 50)
+        let other = dir("other", path: "/Users/x/other", size: 50, children: [dist])
+        let root = dir("x", path: "/Users/x", size: 50, children: [other])
+
+        #expect(PurgeCatalog.discover(in: root).isEmpty)
+    }
+
+    @Test func derivedDataRequiresSiblingXcodeproj() {
+        let derivedData = dir("DerivedData", path: "/Users/x/App/DerivedData", size: 900)
+        let xcodeproj = dir("App.xcodeproj", path: "/Users/x/App/App.xcodeproj", size: 1)
+        let project = dir("App", path: "/Users/x/App", size: 901, children: [derivedData, xcodeproj])
+        let root = dir("x", path: "/Users/x", size: 901, children: [project])
+
+        let targets = PurgeCatalog.discover(in: root)
+
+        #expect(targets.count == 1)
+        #expect(targets.first?.path == "/Users/x/App/DerivedData")
+        #expect(targets.first?.definition.rebuildCommand == "Reopen the project and build (Cmd-B)")
+    }
+
+    @Test func derivedDataNotMatchedWithoutXcodeprojOrXcworkspace() {
+        let derivedData = dir("DerivedData", path: "/Users/x/other/DerivedData", size: 50)
+        let other = dir("other", path: "/Users/x/other", size: 50, children: [derivedData])
+        let root = dir("x", path: "/Users/x", size: 50, children: [other])
+
+        #expect(PurgeCatalog.discover(in: root).isEmpty)
+    }
+
     @Test func fcpBundleProducesOneReportOnlyTargetSummingRenderAndTranscodedMedia() {
         let clip = file("clip1.mov", path: "/Users/x/Movies/Wedding.fcpbundle/Event 1/Render Files/clip1.mov", size: 1000)
         let renderFiles = dir("Render Files", path: "/Users/x/Movies/Wedding.fcpbundle/Event 1/Render Files", size: 1000, children: [clip])

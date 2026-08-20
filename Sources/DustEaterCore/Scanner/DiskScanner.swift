@@ -89,7 +89,7 @@ public actor DiskScanner {
             path: rootPath,
             name: name,
             seenInodes: seenInodes,
-            insideAppBundle: false,
+            insideAggregatedContainer: false,
             onEntries: { [weak self] items, bytes, path in
                 await self?.reportProgress(addedItems: items, addedBytes: bytes, path: path, handler: onProgress)
             }
@@ -124,17 +124,41 @@ public actor DiskScanner {
     /// `TaskGroup` below can genuinely run concurrently instead of each
     /// needing to acquire `self`'s isolation just to build a `FileNode`.
     ///
-    /// - Parameter insideAppBundle: true once recursion has entered a
-    ///   `.app` bundle - files inside are never individually classified
-    ///   into the type index (their bytes are attributed to the bundle as
-    ///   one `.applications` entry instead, recorded once the bundle's own
-    ///   recursive size is known), and a nested bundle (a helper `.app`
-    ///   inside another) is never separately recorded.
+    /// - Parameter insideAggregatedContainer: true once recursion has
+    ///   entered any directory whose *whole subtree* becomes one type-index
+    ///   entry instead of many individual ones - a `.app` bundle, a
+    ///   `DependencyDirectoryCatalog` directory (`node_modules`, `.next`,
+    ///   `dist`, `build`, `target`, `.venv`/`venv`, `Pods`, `DerivedData`),
+    ///   or a `BundleProtection`-recognized creative-suite library
+    ///   (`.fcpbundle`, `.imovielibrary`, `.theater`, `.tvlibrary`,
+    ///   `.logicx`, `.band`) or app-adjacent bundle (`.framework`,
+    ///   `.bundle`, `.xpc`, `.plugin`, `.appex`, `.sparsebundle`). Files
+    ///   inside are never individually classified into the type index -
+    ///   their bytes are attributed to the one aggregate entry instead,
+    ///   recorded once the container's own recursive size is known.
+    ///
+    ///   Deliberately a single flag, not one per container kind: a
+    ///   `.framework` sitting inside a `.app` bundle (routine - most
+    ///   frameworks live inside the apps that ship them) must never
+    ///   become its own second aggregate entry on top of the app's - the
+    ///   *outermost* recognized container wins and nothing nested inside
+    ///   it, of any kind, starts a new aggregation. An earlier version
+    ///   used three independent flags and got exactly this wrong: a
+    ///   `.framework` nested inside a `.app` was both correctly folded
+    ///   into the app's `.applications` total *and* incorrectly recorded a
+    ///   second time as its own `.other` entry, double-counting its bytes
+    ///   and showing a confusing duplicate row - caught by inspecting a
+    ///   real scan live, not by reasoning about the code in the abstract.
+    ///
+    ///   `.photoslibrary` is deliberately not a container here (unlike
+    ///   `BundleProtection`'s own, broader suffix list) - its individual
+    ///   originals are meant to stay individually browsable, just locked
+    ///   (`isPhotosManaged`), not aggregated.
     private static func scanDirectory(
         path: String,
         name: String,
         seenInodes: OSAllocatedUnfairLock<Set<UInt64>>,
-        insideAppBundle: Bool,
+        insideAggregatedContainer: Bool,
         onEntries: @escaping @Sendable (Int, Int64, String) async -> Void
     ) async -> (FileNode, FileTypeIndexPartial) {
         guard !Task.isCancelled else {
@@ -180,7 +204,7 @@ public actor DiskScanner {
                     )
                 )
 
-                if shouldCount, countedSize > 0, !insideAppBundle {
+                if shouldCount, countedSize > 0, !insideAggregatedContainer {
                     let category = FileTypeClassifier.category(forFileName: entry.name)
                     typeIndex.record(
                         FileTypeIndexEntry(
@@ -235,13 +259,16 @@ public actor DiskScanner {
                 var childPath = path
                 childPath.append("/")
                 childPath.append(entry.name)
-                let childInsideAppBundle = insideAppBundle || entry.name.hasSuffix(".app")
+                let childInsideAggregatedContainer = insideAggregatedContainer
+                    || entry.name.hasSuffix(".app")
+                    || DependencyDirectoryCatalog.editorialInfo(forName: entry.name) != nil
+                    || Self.protectedBundleCategory(forName: entry.name) != nil
                 group.addTask {
                     await Self.scanDirectory(
                         path: childPath,
                         name: entry.name,
                         seenInodes: seenInodes,
-                        insideAppBundle: childInsideAppBundle,
+                        insideAggregatedContainer: childInsideAggregatedContainer,
                         onEntries: onEntries
                     )
                 }
@@ -252,17 +279,45 @@ public actor DiskScanner {
             }
         }
 
-        // Whole `.app` bundles become one `.applications` entry each,
-        // recorded here rather than at classification time - only now,
-        // after the bundle's subtree has fully returned, is its complete
-        // recursive size known. Skipped entirely when this directory is
-        // itself already inside a bundle, so a nested helper app is never
-        // double-recorded.
-        if !insideAppBundle {
+        // Whole aggregated containers (`.app` bundles, dependency/build
+        // directories, protected creative-suite/app-adjacent bundles)
+        // become one type-index entry each, recorded here rather than at
+        // classification time - only now, after each child's subtree has
+        // fully returned, is its complete recursive size known. Skipped
+        // entirely when this directory is itself already inside one of
+        // any kind, so nothing nested inside an aggregated container is
+        // ever separately or doubly recorded - see
+        // `insideAggregatedContainer`'s doc comment.
+        if !insideAggregatedContainer {
             for child in subdirChildren where child.name.hasSuffix(".app") {
                 typeIndex.record(
                     FileTypeIndexEntry(path: child.path, name: child.name, sizeBytes: child.size, isPhotosManaged: false),
                     category: .applications
+                )
+            }
+            for child in subdirChildren where DependencyDirectoryCatalog.editorialInfo(forName: child.name) != nil {
+                typeIndex.record(
+                    FileTypeIndexEntry(
+                        path: child.path,
+                        name: child.name,
+                        sizeBytes: child.size,
+                        isPhotosManaged: false,
+                        isDependencyDirectory: true
+                    ),
+                    category: .codeAndProjects
+                )
+            }
+            for child in subdirChildren {
+                guard let category = Self.protectedBundleCategory(forName: child.name) else { continue }
+                typeIndex.record(
+                    FileTypeIndexEntry(
+                        path: child.path,
+                        name: child.name,
+                        sizeBytes: child.size,
+                        isPhotosManaged: false,
+                        isProtectedBundle: true
+                    ),
+                    category: category
                 )
             }
         }
@@ -281,5 +336,21 @@ public actor DiskScanner {
             ),
             typeIndex
         )
+    }
+
+    /// The `FileTypeCategory` a `BundleProtection`-recognized creative-suite
+    /// library or app-adjacent bundle aggregates into, or `nil` if `name`
+    /// isn't one. `.photoslibrary` is deliberately not here - see
+    /// `insideProtectedBundle`'s doc comment on why its contents stay
+    /// individually classified.
+    private static func protectedBundleCategory(forName name: String) -> FileTypeCategory? {
+        let videoSuffixes = [".fcpbundle", ".imovielibrary", ".theater", ".tvlibrary"]
+        let audioSuffixes = [".logicx", ".band"]
+        let otherSuffixes = [".framework", ".bundle", ".xpc", ".plugin", ".appex", ".sparsebundle"]
+
+        if videoSuffixes.contains(where: { name.hasSuffix($0) }) { return .videos }
+        if audioSuffixes.contains(where: { name.hasSuffix($0) }) { return .audio }
+        if otherSuffixes.contains(where: { name.hasSuffix($0) }) { return .other }
+        return nil
     }
 }

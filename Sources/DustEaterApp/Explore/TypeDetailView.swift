@@ -237,6 +237,12 @@ private struct TypeFileRow: View {
                     .foregroundStyle(.tertiary)
                     .frame(width: 16, height: 16)
                     .help("Managed by Photos - delete it in the Photos app.")
+            } else if detail.isProtectedBundle {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 16, height: 16)
+                    .help("A package, not a single file - open it in the app that created it instead of deleting pieces of it.")
             } else {
                 Toggle("", isOn: Binding(get: { isSelected }, set: { _ in onToggle() }))
                     .toggleStyle(.checkbox)

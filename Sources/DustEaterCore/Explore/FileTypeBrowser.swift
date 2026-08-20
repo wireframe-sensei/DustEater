@@ -14,6 +14,10 @@ public struct ExploreFileDetail: Sendable, Identifiable, Equatable {
     /// `LargeFileEntry.lastUsedDate`, which this mirrors.
     public let lastUsedDate: Date?
     public let isPhotosManaged: Bool
+    /// True for the one row that represents a whole creative-suite library
+    /// or app-adjacent bundle - see `FileTypeIndexEntry.isProtectedBundle`.
+    /// Locked the same way `isPhotosManaged` is, with different hint text.
+    public let isProtectedBundle: Bool
     /// True if this file is iCloud-synced - badged in the UI with a
     /// warning that deletion removes it from every device.
     public let isiCloudSynced: Bool
@@ -24,6 +28,7 @@ public struct ExploreFileDetail: Sendable, Identifiable, Equatable {
         logicalSize: Int64,
         lastUsedDate: Date?,
         isPhotosManaged: Bool,
+        isProtectedBundle: Bool = false,
         isiCloudSynced: Bool
     ) {
         self.path = path
@@ -31,6 +36,7 @@ public struct ExploreFileDetail: Sendable, Identifiable, Equatable {
         self.logicalSize = logicalSize
         self.lastUsedDate = lastUsedDate
         self.isPhotosManaged = isPhotosManaged
+        self.isProtectedBundle = isProtectedBundle
         self.isiCloudSynced = isiCloudSynced
     }
 
@@ -59,6 +65,21 @@ public struct ExploreFileDetail: Sendable, Identifiable, Equatable {
                 sizeBytes: logicalSize,
                 safety: .reportOnly,
                 hint: "Managed by Photos - delete it in the Photos app.",
+                deletablePaths: [],
+                revealPath: path,
+                isUserContent: true,
+                isiCloudSynced: isiCloudSynced
+            )
+        }
+        if isProtectedBundle {
+            return CleanupItem(
+                id: path,
+                source: .fileType(category),
+                name: name,
+                detail: abbreviatedPath,
+                sizeBytes: logicalSize,
+                safety: .reportOnly,
+                hint: "A package, not a single file - open it in the app that created it instead of deleting pieces of it.",
                 deletablePaths: [],
                 revealPath: path,
                 isUserContent: true,
@@ -109,8 +130,20 @@ public enum FileTypeBrowser {
         for entry: FileTypeIndexEntry,
         lastUsedDateProvider: @Sendable (String) async -> Date?
     ) async -> ExploreFileDetail? {
-        guard let stats = (try? await BlockingIO.run { FileStatReader.facts(atPath: entry.path) }) ?? nil else {
-            return nil
+        // `entry.path` is a directory for a protected-bundle aggregate
+        // (a `.fcpbundle`, a `.framework`, ...) - `lstat`ing it would
+        // return the directory inode's own tiny size, not the recursive
+        // total `DiskScanner` already computed and folded into
+        // `sizeBytes`. Use that directly instead of re-deriving a
+        // "logical size" that doesn't mean anything at the folder level.
+        let logicalSize: Int64
+        if entry.isProtectedBundle {
+            logicalSize = entry.sizeBytes
+        } else {
+            guard let stats = (try? await BlockingIO.run { FileStatReader.facts(atPath: entry.path) }) ?? nil else {
+                return nil
+            }
+            logicalSize = stats.logicalSize
         }
         let lastUsedDate = await lastUsedDateProvider(entry.path)
         let isiCloudSynced = (try? await BlockingIO.run { isiCloudItem(atPath: entry.path) }) ?? false
@@ -118,9 +151,10 @@ public enum FileTypeBrowser {
         return ExploreFileDetail(
             path: entry.path,
             name: entry.name,
-            logicalSize: stats.logicalSize,
+            logicalSize: logicalSize,
             lastUsedDate: lastUsedDate,
             isPhotosManaged: entry.isPhotosManaged,
+            isProtectedBundle: entry.isProtectedBundle,
             isiCloudSynced: isiCloudSynced
         )
     }

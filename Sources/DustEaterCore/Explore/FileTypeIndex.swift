@@ -18,12 +18,44 @@ public struct FileTypeIndexEntry: Sendable, Equatable {
     /// I/O) rather than on demand, since it's essentially free during a
     /// scan that already has the full path in hand.
     public let isPhotosManaged: Bool
+    /// True for the one entry `DiskScanner` records for a whole recognized
+    /// dependency/build directory (`node_modules`, `.next`, `dist`, `build`,
+    /// `target`, `.venv`/`venv`, `Pods`, `DerivedData`) - the entry's
+    /// `sizeBytes` is the directory's full recursive size, not one file's,
+    /// exactly the same shape as the `.applications` bundle entries this
+    /// mirrors. `Explore`'s Code & Projects screen uses this flag to split
+    /// the category's entries into folder rows versus loose file rows
+    /// without re-deriving the name match itself.
+    public let isDependencyDirectory: Bool
+    /// True for the one entry `DiskScanner` records for a whole
+    /// `BundleProtection`-recognized creative-suite library package
+    /// (`.fcpbundle`, `.imovielibrary`, `.theater`, `.tvlibrary`,
+    /// `.logicx`, `.band`) or app-adjacent bundle (`.framework`,
+    /// `.bundle`, `.xpc`, `.plugin`, `.appex`, `.sparsebundle) - the same
+    /// "a folder, not its files, is the natural unit" problem
+    /// `isDependencyDirectory` solves for dependency trees, applied to
+    /// package directories `BundleProtection` already refuses to treat as
+    /// individually inspectable elsewhere in the app. Unlike a dependency
+    /// directory, this has no rebuild command - Explore shows it as one
+    /// locked, report-only row in its category's normal file list rather
+    /// than a dedicated folder section, the same lock-instead-of-checkbox
+    /// treatment `isPhotosManaged` already gets.
+    public let isProtectedBundle: Bool
 
-    public init(path: String, name: String, sizeBytes: Int64, isPhotosManaged: Bool) {
+    public init(
+        path: String,
+        name: String,
+        sizeBytes: Int64,
+        isPhotosManaged: Bool,
+        isDependencyDirectory: Bool = false,
+        isProtectedBundle: Bool = false
+    ) {
         self.path = path
         self.name = name
         self.sizeBytes = sizeBytes
         self.isPhotosManaged = isPhotosManaged
+        self.isDependencyDirectory = isDependencyDirectory
+        self.isProtectedBundle = isProtectedBundle
     }
 }
 
