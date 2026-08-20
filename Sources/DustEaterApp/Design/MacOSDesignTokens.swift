@@ -249,3 +249,39 @@ extension View {
         #endif
     }
 }
+
+/// Stable proxy for the design kit's "Scroll Edge Effect - Hard/Soft"
+/// tokens. Real `ScrollEdgeEffectStyle` (SwiftUI) only exists in the macOS
+/// 26 SDK - confirmed against the actual `.swiftinterface`, which marks
+/// both the type and the modifier `@available(macOS 26, *)` - so, same
+/// reasoning as `glassBackground` above, call sites need a stable type
+/// that compiles on every toolchain; the real one is resolved only inside
+/// the availability-gated branch of `scrollEdgeEffect(_:for:)` below.
+enum EdgeEffectStyle {
+    /// For content that scrolls under fixed, opaque-ish chrome (a toolbar,
+    /// a segmented control) - a firmer fade.
+    case hard
+    /// For content that scrolls under floating glass.
+    case soft
+}
+
+extension View {
+    /// A gradient fade where scrollable content passes under fixed chrome,
+    /// replacing a hard `Divider()` line - per the design handoff: "apply a
+    /// gradient fade at that edge rather than a hard divider line." Falls
+    /// back to a no-op on a toolchain/OS that doesn't have the real API:
+    /// content still scrolls and clips correctly via the container's own
+    /// bounds, it just won't fade at the edge.
+    @ViewBuilder
+    func scrollEdgeEffect(_ style: EdgeEffectStyle, for edges: Edge.Set) -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            self.scrollEdgeEffectStyle(style == .hard ? .hard : .soft, for: edges)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+}

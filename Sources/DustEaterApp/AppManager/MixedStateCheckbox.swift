@@ -2,10 +2,10 @@ import SwiftUI
 
 /// Tri-state checkbox for "select all" controls, backed by a plain
 /// `NSControl.StateValue` rather than any one feature's selection type -
-/// both App Manager's `AppUninstallSelection.SelectAllState` and the
-/// duplicate inspector's own selection state map onto it via the
-/// `nsControlState` extensions below, so this stays a shared, feature-
-/// agnostic component.
+/// `FindingGroupView` maps `SelectionStore.SelectAllState` onto it via the
+/// `nsControlState` computed property already defined on that type, so
+/// this stays a shared, feature-agnostic component rather than knowing
+/// about any one selection type itself.
 struct MixedStateCheckbox: NSViewRepresentable {
     let state: NSControl.StateValue
     let action: () -> Void
@@ -35,16 +35,6 @@ struct MixedStateCheckbox: NSViewRepresentable {
 
         @objc func clicked() {
             action()
-        }
-    }
-}
-
-extension AppUninstallSelection.SelectAllState {
-    var nsControlState: NSControl.StateValue {
-        switch self {
-        case .all: .on
-        case .none: .off
-        case .mixed: .mixed
         }
     }
 }

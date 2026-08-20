@@ -63,27 +63,36 @@ public final class AppManagerScanner {
         }
     }
 
-    public func reconcileInstalledAppUninstalled(
-        appID: String,
-        bundleWasRemoved: Bool,
-        removedItemPaths: Set<String>
-    ) {
-        guard case .loaded(var installed, var orphaned, let developerTools) = state,
-              let index = installed.firstIndex(where: { $0.id == appID }) else { return }
+    /// Reconciles installed/unused/developer-tool entries after a batch
+    /// commit (via the shared `CleanupCommitter`, from Review) removed some
+    /// of their paths. The general-purpose successor to three now-unused
+    /// per-entity reconcile methods this replaced: App Manager no longer
+    /// has a delete path of its own that already knows exactly which single
+    /// entity/orphan/tool id was affected, so this instead walks every list
+    /// checking which entries had any of their paths in `deletedPaths` -
+    /// works uniformly whether the commit touched one app or twenty.
+    public func reconcileDeletedPaths(_ deletedPaths: Set<String>) {
+        guard case .loaded(var installed, var orphaned, var developerTools) = state,
+              !deletedPaths.isEmpty else { return }
 
-        let entity = installed[index]
-        let remainingItems = entity.relatedItems.filter { !removedItemPaths.contains($0.path) }
+        installed = installed.compactMap { entity -> AppDiskEntity? in
+            let bundleRemoved = deletedPaths.contains(entity.appPath)
+            let remainingItems = entity.relatedItems.filter { !deletedPaths.contains($0.path) }
+            guard bundleRemoved || remainingItems.count != entity.relatedItems.count else { return entity }
 
-        if bundleWasRemoved {
-            installed.remove(at: index)
-            if !remainingItems.isEmpty {
-                orphaned.append(OrphanedAppData(
-                    inferredIdentifier: entity.bundleIdentifier ?? entity.id,
-                    items: remainingItems
-                ))
+            if bundleRemoved {
+                // Any related storage that survived the bundle itself
+                // being deleted becomes a leftover, same as the old
+                // `reconcileInstalledAppUninstalled(bundleWasRemoved: true)`.
+                if !remainingItems.isEmpty {
+                    orphaned.append(OrphanedAppData(
+                        inferredIdentifier: entity.bundleIdentifier ?? entity.id,
+                        items: remainingItems
+                    ))
+                }
+                return nil
             }
-        } else {
-            installed[index] = AppDiskEntity(
+            return AppDiskEntity(
                 displayName: entity.displayName,
                 bundleIdentifier: entity.bundleIdentifier,
                 appPath: entity.appPath,
@@ -93,39 +102,20 @@ public final class AppManagerScanner {
             )
         }
 
-        state = .loaded(installed: installed, orphaned: orphaned, developerTools: developerTools)
-    }
-
-    public func reconcileOrphanRemoved(orphanID: String, removedItemPaths: Set<String>) {
-        guard case .loaded(let installed, var orphaned, let developerTools) = state,
-              let index = orphaned.firstIndex(where: { $0.id == orphanID }) else { return }
-
-        let remainingItems = orphaned[index].items.filter { !removedItemPaths.contains($0.path) }
-        if remainingItems.isEmpty {
-            orphaned.remove(at: index)
-        } else {
-            orphaned[index] = OrphanedAppData(
-                inferredIdentifier: orphaned[index].inferredIdentifier,
-                items: remainingItems
-            )
+        func reconciled(_ list: [OrphanedAppData]) -> [OrphanedAppData] {
+            list.compactMap { orphan in
+                let remainingItems = orphan.items.filter { !deletedPaths.contains($0.path) }
+                guard remainingItems.count != orphan.items.count else { return orphan }
+                guard !remainingItems.isEmpty else { return nil }
+                return OrphanedAppData(
+                    inferredIdentifier: orphan.inferredIdentifier,
+                    items: remainingItems,
+                    isVendorSibling: orphan.isVendorSibling
+                )
+            }
         }
-
-        state = .loaded(installed: installed, orphaned: orphaned, developerTools: developerTools)
-    }
-
-    public func reconcileDeveloperToolRemoved(toolID: String, removedItemPaths: Set<String>) {
-        guard case .loaded(let installed, let orphaned, var developerTools) = state,
-              let index = developerTools.firstIndex(where: { $0.id == toolID }) else { return }
-
-        let remainingItems = developerTools[index].items.filter { !removedItemPaths.contains($0.path) }
-        if remainingItems.isEmpty {
-            developerTools.remove(at: index)
-        } else {
-            developerTools[index] = OrphanedAppData(
-                inferredIdentifier: developerTools[index].inferredIdentifier,
-                items: remainingItems
-            )
-        }
+        orphaned = reconciled(orphaned)
+        developerTools = reconciled(developerTools)
 
         state = .loaded(installed: installed, orphaned: orphaned, developerTools: developerTools)
     }

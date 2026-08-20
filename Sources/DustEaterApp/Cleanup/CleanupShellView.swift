@@ -34,10 +34,10 @@ struct CleanupShellView: View {
     let onRescan: () -> Void
 
     @State private var destination: Destination = .cleanup
-    // Starts on the Scanning stage - see `advanceStageIfNeeded`, which
-    // moves it to `.findings` either when the user taps Review Findings or
-    // automatically once the scan leaves `.scanning` on its own (finished
-    // or cancelled), whichever happens first.
+    // Defaults to `.scanning` and is corrected in `init` below when
+    // `coordinator` already has a finished or cancelled scan at creation
+    // time - see the custom initializer for why a hardcoded default here
+    // isn't safe.
     @State private var cleanupStage: CleanupStage = .scanning
 
     // Cleanup
@@ -75,6 +75,49 @@ struct CleanupShellView: View {
     @State private var exploreMode: ExploreMode = .byType
     @State private var selectedTypeCategory: FileTypeCategory?
 
+    // Apps - owned here, not by `AppManagerView`, so switching to Explore
+    // or Cleanup and back doesn't re-trigger a full app rescan, and so
+    // `performCommit` below can reconcile it after a Review commit removes
+    // an app - the same reason `coordinator` is owned here rather than by
+    // the treemap view.
+    @State private var appManagerScanner = AppManagerScanner()
+
+    /// A synthesized memberwise-style initializer, needed only to correct
+    /// `cleanupStage`'s starting value: `screen == .scanFlow` can be
+    /// reached with `coordinator.state` already `.finished` (Home's "View
+    /// Results", or the menu bar's "Review in DustEater" after navigating
+    /// away and back) - each of those re-navigations tears down and
+    /// recreates this whole view, so a hardcoded `@State ... = .scanning`
+    /// default would show a permanent, stale "still scanning" screen for a
+    /// scan that already finished. `.onChange(of: coordinator.state)`
+    /// below can't fix this on its own - it only fires on a *subsequent*
+    /// change, not on the state this view was created with.
+    init(
+        coordinator: ScanCoordinator,
+        treemapRects: @escaping (CGSize) -> [TreemapRect],
+        treemapCache: TreemapCache,
+        selectedTheme: Binding<ColorTheme>,
+        monitoringSettings: MonitoringSettingsStore,
+        onBackToHome: @escaping () -> Void,
+        onScanFolder: @escaping () -> Void,
+        onRescan: @escaping () -> Void
+    ) {
+        self.coordinator = coordinator
+        self.treemapRects = treemapRects
+        self.treemapCache = treemapCache
+        self._selectedTheme = selectedTheme
+        self.monitoringSettings = monitoringSettings
+        self.onBackToHome = onBackToHome
+        self.onScanFolder = onScanFolder
+        self.onRescan = onRescan
+
+        if case .scanning = coordinator.state {
+            _cleanupStage = State(initialValue: .scanning)
+        } else {
+            _cleanupStage = State(initialValue: .findings)
+        }
+    }
+
     /// The scanned tree, once available - `nil` during `.scanning` and
     /// after a cancel that happened before the tree finished. Explore is
     /// the only destination that actually needs this; Cleanup and Apps
@@ -103,15 +146,37 @@ struct CleanupShellView: View {
         findings.reduce(0) { $0 + $1.reclaimableBytes }
     }
 
+    /// The tray floats over whichever destination is active - selection is
+    /// app-wide, not Cleanup-specific (Apps rows and Explore's by-type files
+    /// both feed the same `SelectionStore`) - except while Review or the
+    /// Receipt is on screen, since those already show the selection (or its
+    /// aftermath) directly and a second "N selected, Review" affordance
+    /// there would be redundant.
+    private var shouldShowSelectionTray: Bool {
+        guard selection.count > 0 else { return false }
+        if destination == .cleanup, cleanupStage == .review || cleanupStage == .receipt { return false }
+        return true
+    }
+
     var body: some View {
         NavigationSplitView {
             sidebar
         } detail: {
-            Group {
-                switch destination {
-                case .cleanup: cleanupDetail
-                case .explore: exploreDetail
-                case .apps: AppManagerView(onBackToHome: onBackToHome)
+            ZStack(alignment: .bottom) {
+                Group {
+                    switch destination {
+                    case .cleanup: cleanupDetail
+                    case .explore: exploreDetail
+                    case .apps: AppManagerView(scanner: appManagerScanner, selection: selection)
+                    }
+                }
+                .padding(.bottom, shouldShowSelectionTray ? 60 : 0)
+
+                if shouldShowSelectionTray {
+                    SelectionTray(selection: selection, onClear: { selection.clear() }, onReview: {
+                        destination = .cleanup
+                        cleanupStage = .review
+                    })
                 }
             }
         }
@@ -278,9 +343,11 @@ struct CleanupShellView: View {
                 }
             }
             .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 28)
             .foregroundStyle(isSelected ? .white : .primary)
             .background(isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -392,27 +459,20 @@ struct CleanupShellView: View {
             }
 
         case .findings:
-            ZStack(alignment: .bottom) {
-                CleanupView(
-                    findings: findings,
-                    selection: selection,
-                    expandedFindings: $expandedFindings,
-                    scrollToFindingID: $scrollToFindingID,
-                    onOpenAppManager: { destination = .apps },
-                    onOpenXcodeArchives: { showXcodeArchives = true },
-                    canUndo: receipt?.canUndo ?? false,
-                    onReviewShortcut: { if selection.count > 0 { cleanupStage = .review } },
-                    onUndoShortcut: performUndo,
-                    onRescanShortcut: onRescan,
-                    hasFullDiskAccess: hasFullDiskAccess,
-                    onGrantAccess: { showAccessRequestSheet = true }
-                )
-                .padding(.bottom, selection.count > 0 ? 60 : 0)
-
-                if selection.count > 0 {
-                    SelectionTray(selection: selection, onClear: { selection.clear() }, onReview: { cleanupStage = .review })
-                }
-            }
+            CleanupView(
+                findings: findings,
+                selection: selection,
+                expandedFindings: $expandedFindings,
+                scrollToFindingID: $scrollToFindingID,
+                onOpenAppManager: { destination = .apps },
+                onOpenXcodeArchives: { showXcodeArchives = true },
+                canUndo: receipt?.canUndo ?? false,
+                onReviewShortcut: { if selection.count > 0 { cleanupStage = .review } },
+                onUndoShortcut: performUndo,
+                onRescanShortcut: onRescan,
+                hasFullDiskAccess: hasFullDiskAccess,
+                onGrantAccess: { showAccessRequestSheet = true }
+            )
             .navigationTitle("Cleanup")
 
         case .review:
@@ -470,9 +530,11 @@ struct CleanupShellView: View {
     }
 
     /// The only commit point in the app. Runs off the main actor via
-    /// `CleanupCommitter`, then reconciles both `coordinator`'s findings
-    /// and the live scan tree so Explore and the sidebar total stay
-    /// correct without a rescan.
+    /// `CleanupCommitter`, then reconciles `coordinator`'s findings, the
+    /// live scan tree, and `appManagerScanner`'s installed/unused/developer-
+    /// tool lists, so Explore, the sidebar total, and Apps all stay correct
+    /// without a rescan - including when the committed batch removed an app
+    /// checked from the Apps list rather than a Cleanup finding.
     private func performCommit(permanently: Bool) {
         isCommitting = true
         commitErrorMessage = nil
@@ -485,6 +547,7 @@ struct CleanupShellView: View {
                 isCommitting = false
                 coordinator.removeDeletedPaths(result.deletedPaths)
                 reconcileScanTree(result.deletedPaths)
+                appManagerScanner.reconcileDeletedPaths(result.deletedPaths)
                 selection.clear()
 
                 receipt = ReceiptData(
@@ -521,6 +584,12 @@ struct CleanupShellView: View {
                 self.receipt = nil
                 cleanupStage = .findings
                 onRescan()
+                // A put-back app has no way to reappear in `appManagerScanner`'s
+                // lists otherwise - `reconcileDeletedPaths` only ever removes
+                // entries, and there's no equivalent "add this back" short
+                // cut, so a real rescan is the only correct way to reflect a
+                // restored app the same way the tree/findings rescan already does.
+                appManagerScanner.scan()
                 if !errors.isEmpty {
                     commitErrorMessage = errors.joined(separator: "\n")
                 }
@@ -547,12 +616,21 @@ struct CleanupShellView: View {
                     treemapContent(root: finishedRoot)
                 case .byType:
                     if let selectedTypeCategory {
-                        TypeDetailView(
-                            category: selectedTypeCategory,
-                            index: coordinator.typeIndex,
-                            selection: selection,
-                            onBack: { self.selectedTypeCategory = nil }
-                        )
+                        if selectedTypeCategory == .codeAndProjects {
+                            CodeProjectsDetailView(
+                                index: coordinator.typeIndex,
+                                root: finishedRoot,
+                                selection: selection,
+                                onBack: { self.selectedTypeCategory = nil }
+                            )
+                        } else {
+                            TypeDetailView(
+                                category: selectedTypeCategory,
+                                index: coordinator.typeIndex,
+                                selection: selection,
+                                onBack: { self.selectedTypeCategory = nil }
+                            )
+                        }
                     } else {
                         TypeBoardView(index: coordinator.typeIndex, onSelectType: { category in
                             if category == .applications {

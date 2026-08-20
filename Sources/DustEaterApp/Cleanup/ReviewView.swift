@@ -11,9 +11,10 @@ struct ReviewView: View {
     private enum Destination { case trash, permanent }
     @State private var destination: Destination = .trash
 
-    /// Findings first (in their fixed order), then file types selected from
-    /// Explore - two different sources feeding one review list, per "do not
-    /// create a second, parallel delete path."
+    /// Findings first (in their fixed order), then apps checked in App
+    /// Manager, then file types selected from Explore - three different
+    /// sources feeding one review list, per "do not create a second,
+    /// parallel delete path."
     private var groupedItems: [(source: CleanupItemSource, items: [CleanupItem])] {
         let grouped = Dictionary(grouping: selection.items, by: \.source)
 
@@ -22,12 +23,16 @@ struct ReviewView: View {
             guard let items = grouped[source], !items.isEmpty else { return nil }
             return (source, items.sorted { $0.sizeBytes > $1.sizeBytes })
         }
+        let appGroup: [(CleanupItemSource, [CleanupItem])] = {
+            guard let items = grouped[.app], !items.isEmpty else { return [] }
+            return [(.app, items.sorted { $0.sizeBytes > $1.sizeBytes })]
+        }()
         let fileTypeGroups: [(CleanupItemSource, [CleanupItem])] = FileTypeCategory.allCases.compactMap { category in
             let source = CleanupItemSource.fileType(category)
             guard let items = grouped[source], !items.isEmpty else { return nil }
             return (source, items.sorted { $0.sizeBytes > $1.sizeBytes })
         }
-        return findingGroups + fileTypeGroups
+        return findingGroups + appGroup + fileTypeGroups
     }
 
     private var rebuildCommands: [String] {

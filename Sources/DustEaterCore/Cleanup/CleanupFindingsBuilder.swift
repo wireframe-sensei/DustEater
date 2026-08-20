@@ -49,24 +49,51 @@ public enum CleanupFindingsBuilder {
         let items: [CleanupItem] = installed.compactMap { entity in
             let isStale = entity.lastOpenedDate.map { $0 < cutoff } ?? true
             guard isStale, entity.trueTotalSize > 0 else { return nil }
-
-            return CleanupItem(
-                id: entity.id,
-                source: .finding(.unusedApplications),
-                name: entity.displayName,
-                detail: abbreviated(entity.appPath),
-                sizeBytes: entity.trueTotalSize,
-                safety: .caution,
-                note: entity.lastOpenedDate.map(monthYear) ?? "Never opened",
-                deletablePaths: entity.relatedItems.map(\.path) + [entity.appPath],
-                appBundlePath: entity.appPath,
-                revealPath: entity.appPath,
-                blockingAppBundleID: entity.bundleIdentifier
-            )
+            return appCleanupItem(for: entity, source: .finding(.unusedApplications))
         }
 
         guard !items.isEmpty else { return nil }
         return CleanupFinding(id: .unusedApplications, items: items)
+    }
+
+    /// Builds the "delete this app entirely" item - bundle plus every piece
+    /// of its related storage - for a given `source`. Shared by the
+    /// `unusedApplications` finding above (pre-filtered to stale apps only)
+    /// and App Manager's Installed list (every installed app, unfiltered),
+    /// which both need to answer the exact same question for an
+    /// `AppDiskEntity`: what would deleting this app actually remove.
+    public static func appCleanupItem(for entity: AppDiskEntity, source: CleanupItemSource) -> CleanupItem {
+        CleanupItem(
+            id: entity.id,
+            source: source,
+            name: entity.displayName,
+            detail: abbreviated(entity.appPath),
+            sizeBytes: entity.trueTotalSize,
+            safety: .caution,
+            note: entity.lastOpenedDate.map(monthYear) ?? "Never opened",
+            deletablePaths: entity.relatedItems.map(\.path) + [entity.appPath],
+            appBundlePath: entity.appPath,
+            revealPath: entity.appPath,
+            blockingAppBundleID: entity.bundleIdentifier
+        )
+    }
+
+    /// The same idea as `appCleanupItem(for: AppDiskEntity, ...)` above, for
+    /// leftover data with no installed app attached (App Manager's Unused
+    /// and Developer Tools lists) - there's no bundle to route through
+    /// `deleteAppBundle`, just the related items themselves.
+    public static func appCleanupItem(for orphan: OrphanedAppData, source: CleanupItemSource) -> CleanupItem {
+        CleanupItem(
+            id: orphan.id,
+            source: source,
+            name: orphan.inferredDisplayName,
+            detail: orphan.items.first.map { abbreviated($0.path) } ?? "",
+            sizeBytes: orphan.totalSize,
+            safety: .caution,
+            note: "\(orphan.items.count) item\(orphan.items.count == 1 ? "" : "s")",
+            deletablePaths: orphan.items.map(\.path),
+            revealPath: orphan.items.first?.path ?? ""
+        )
     }
 
     /// Downloads older than 12 months. Scoped to `~/Downloads` by rooting

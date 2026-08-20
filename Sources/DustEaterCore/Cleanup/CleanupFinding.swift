@@ -88,19 +88,25 @@ public enum CleanupFindingID: String, Sendable, CaseIterable, Identifiable {
 }
 
 /// Where a `CleanupItem` came from - one of the six ranked Cleanup findings,
-/// or a file the user selected while browsing Explore's Type board/detail.
-/// The two are grouped and labeled differently in Review (a finding's fixed
-/// `displayName` vs. a file type's), but flow through exactly one
-/// `SelectionStore`/`CleanupCommitter` either way - Explore selecting a file
-/// must never create a second, parallel delete path.
+/// a row checked in App Manager, or a file the user selected while browsing
+/// Explore's Type board/detail. All three are grouped and labeled
+/// differently in Review, but flow through exactly one
+/// `SelectionStore`/`CleanupCommitter` either way - App Manager and Explore
+/// selecting something must never create a second, parallel delete path.
 public enum CleanupItemSource: Sendable, Equatable, Hashable {
     case finding(CleanupFindingID)
+    /// A row checked in App Manager - installed, unused, or a developer
+    /// tool. One case regardless of which of those three lists the row
+    /// came from: Review shows one "Apps" group, not three, since the
+    /// distinction stops mattering once something is about to be deleted.
+    case app
     case fileType(FileTypeCategory)
 
     /// The uppercase group header Review shows above this item's row.
     public var reviewGroupTitle: String {
         switch self {
         case .finding(let id): return id.displayName
+        case .app: return "Apps"
         case .fileType(let category): return category.displayName
         }
     }
